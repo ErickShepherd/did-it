@@ -1,4 +1,4 @@
-"""Fabricated-transcript builder for tests and the synthetic eval corpus.
+"""Fabricated-transcript builder for tests and the synthetic eval corpus (public: did_it.testing).
 
 Emits records in the real Claude Code .jsonl schema (verified against live transcripts,
 versions 2.1.156-2.1.205): per-record envelope with type/uuid/parentUuid/timestamp/version/

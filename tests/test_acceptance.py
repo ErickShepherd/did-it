@@ -12,7 +12,7 @@ import did_it
 from did_it.cli import main
 from did_it.verdicts import Verdict
 
-from .builder import SessionBuilder
+from did_it.testing import SessionBuilder
 
 
 def verdict_of(receipts, fragment: str) -> Verdict:

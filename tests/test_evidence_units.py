@@ -10,7 +10,7 @@ import did_it
 from did_it.verdicts import Verdict
 from did_it.evidence import is_test_command
 
-from .builder import SessionBuilder
+from did_it.testing import SessionBuilder
 
 
 class TestIsTestCommand:
@@ -157,3 +157,15 @@ class TestIntentPhrases:
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         (r,) = receipts
         assert r.verdict == Verdict.BACKED_TRANSCRIPT
+
+
+class TestCountCapture:
+    def test_count_captured_when_suite_phrase_matches_first(self, tmp_path):
+        # "The test suite is green: 13 passed." must still capture 13 for the miscount check.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("The test suite is green: 13 passed.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        (r,) = receipts
+        assert r.verdict == Verdict.UNSUPPORTED  # claimed 13, run shows 12

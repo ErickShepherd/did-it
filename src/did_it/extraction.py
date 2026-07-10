@@ -165,6 +165,9 @@ SEMANTIC_VERBS = re.compile(
     re.I,
 )
 
+#: Count fallback when the matching TEST_PASS branch carries no count group.
+COUNT_FALLBACK = re.compile(rf"\b({_NUM})\s+(?:tests?\s+)?pass(?:ed|ing)?\b", re.I)
+
 #: A path-ish or tool-ish token usable to bind a claim to a tool call.
 BIND_TOKEN = re.compile(r"[\w./-]*(?:/|\.)[\w./-]+|\b(?:pytest|ruff|mypy|npm|cargo|git|make|tox)\b")
 
@@ -182,6 +185,11 @@ def _classify(sentence: str) -> Claim | None:
             if m.group(g):
                 c.count = int(m.group(g).replace(",", ""))
                 break
+        if c.count is None:
+            # the matching branch may be countless ("suite is green: 13 passed")
+            m2 = COUNT_FALLBACK.search(sentence)
+            if m2:
+                c.count = int(m2.group(1).replace(",", ""))
         return c
     if TEST_FAIL.search(sentence) or (m and negated):
         c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
