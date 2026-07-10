@@ -1,9 +1,9 @@
-"""Command-line entry point (skeleton).
+"""Command-line entry point.
 
     did-it <transcript.jsonl> [--verify <repo>]
 
-Design: docs/design/did-it.md — "Observable contract". The argument surface is wired here; the
-pipeline it drives is not implemented. Running it today prints a not-implemented notice and exits 2.
+Design: docs/design/did-it.md — "Observable contract". Exit codes: 0 = no accusation (including
+abstentions), 1 = at least one CONTRADICTED claim, 2 = usage/IO error.
 """
 
 from __future__ import annotations
@@ -34,9 +34,20 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if not args.transcript:
         build_parser().error("the transcript argument is required")
-    # Scaffolding: the pipeline (parse -> extract -> reconcile -> report) is not implemented yet.
-    print("did-it: not implemented yet — this is scaffolding. See docs/design/did-it.md.", file=sys.stderr)
-    return 2
+
+    import did_it
+
+    from . import report
+
+    if args.verify:
+        print("did-it: --verify is a v1.1 upgrade; running transcript-only.", file=sys.stderr)
+    try:
+        receipts = did_it.check(args.transcript)
+    except OSError as e:
+        print(f"did-it: cannot read transcript: {e}", file=sys.stderr)
+        return 2
+    print(report.render(receipts), end="")
+    return report.exit_code(receipts)
 
 
 if __name__ == "__main__":

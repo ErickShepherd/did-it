@@ -18,10 +18,25 @@ __version__ = "0.1.0"
 
 
 def check(path: str | Path, *, verify: bool = False) -> list[Receipt]:
-    """Adjudicate every checkable claim in a transcript. Fail-closed, deterministic, read-only."""
-    from . import extraction, reconcile, transcript
+    """Adjudicate every checkable claim in a transcript. Fail-closed, deterministic, read-only.
 
-    session = transcript.parse(path)
+    An unknown schema or a partially-parseable file yields one session-level NOT-EVALUABLE
+    receipt — never a claim verdict (design: unknown fails closed, never to CONTRADICTED).
+    OSError (missing/unreadable file) propagates: that is a usage error, not an adjudication.
+    """
+    from . import extraction, reconcile, transcript
+    from .verdicts import Verdict
+
+    try:
+        session = transcript.parse(path)
+    except (transcript.UnknownSchema, transcript.ParseFailure) as e:
+        return [
+            Receipt(
+                claim_text="(entire session)",
+                verdict=Verdict.NOT_EVALUABLE,
+                notes=[f"{type(e).__name__}: {e}"],
+            )
+        ]
     claims = extraction.extract_claims(session)
     return reconcile.reconcile(claims, session, verify=verify)
 
