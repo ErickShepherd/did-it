@@ -183,7 +183,11 @@ def _classify(sentence: str) -> Claim | None:
     # which broke binding against the exactly-matching command (panel, seat-4).
     c.tokens = [t.rstrip(".,;:!?") for t in BIND_TOKEN.findall(sentence)]
 
-    negated = bool(TEST_NEG.search(sentence)) and not TEST_NEG_EXEMPT.search(sentence)
+    # Negation is judged on the exemption-STRIPPED residual: "no failures" clears the flag
+    # only when no live failure assertion remains in the same sentence — "…, no new
+    # failures, though the integration suite still fails" is an honest partial report and
+    # must stay negative (review: exemption-neutralized admissions were falsely accused).
+    negated = bool(TEST_NEG.search(TEST_NEG_EXEMPT.sub(" ", sentence)))
     m = TEST_PASS.search(sentence)
     if m and not negated:
         c.kind, c.is_procedural = "test-pass", True

@@ -469,10 +469,12 @@ def _claim_names(text: str, tokens: set[str]) -> bool:
 @functools.lru_cache(maxsize=256)
 def _tool_position_re(word: str) -> re.Pattern[str]:
     w = re.escape(word)
+    # IGNORECASE rather than lowering the command: a lowered command can never match the
+    # env-prefix skip ([A-Z_]...=), silently unbinding real `CI=1 pytest`-style runs.
     return re.compile(
         rf"(?:^|[;|]|&&|\|\||\$\(|`)\s*(?:[A-Z_][A-Z0-9_]*=\S+\s+)*"
         rf"(?:\S*/)?(?:{w}|python3?\s+-m\s+{w}|(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?{w})\b",
-        re.M,
+        re.M | re.I,
     )
 
 
@@ -481,7 +483,7 @@ def runs_tool(command: str, word: str) -> bool:
     an npm-style runner) — `pip install pytest` and `grep ruff …` do not run the tool."""
     if not word or not _strippable(command):
         return False
-    return bool(_tool_position_re(word.lower()).search(_stripped(command).lower()))
+    return bool(_tool_position_re(word.lower()).search(_stripped(command)))
 
 
 def binds_command(tokens: list[str], command: str) -> bool:

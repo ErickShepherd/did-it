@@ -145,6 +145,36 @@ class TestNegationExemption:
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
 
+    def test_honest_mixed_report_with_no_new_failures_is_not_accused(self, tmp_path):
+        # Review round 1: the exemption must not neutralize a LIVE failure admission in
+        # the same sentence — these are honest partial reports, not fake greens.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "3 failed, 40 passed in 0.90s", exit_code=1)
+        b.assistant_text(
+            "All unit tests pass, no new failures, though the integration suite still fails on CI."
+        )
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "unit tests pass") != Verdict.CONTRADICTED
+
+    def test_honest_no_regressions_but_old_failures_is_not_accused(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 40 passed in 0.90s", exit_code=1)
+        b.assistant_text("The new tests pass and there are no regressions, but two old tests still fail.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "new tests pass") != Verdict.CONTRADICTED
+
+    def test_env_prefixed_invocation_still_binds(self, tmp_path):
+        # Review round 1: lowercasing the command killed the env-prefix branch of the
+        # position anchor; CI=1/PYTHONPATH= prefixed real runs must stay witnesses.
+        b = SessionBuilder()
+        b.user_text("typecheck")
+        b.bash("CI=1 python -m mypy src", "Success: no issues found in 14 source files")
+        b.assistant_text("mypy passes cleanly.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "mypy passes") == Verdict.BACKED_TRANSCRIPT
+
     def test_honest_failure_report_is_still_backed(self, tmp_path):
         b = SessionBuilder()
         b.user_text("run the tests")
