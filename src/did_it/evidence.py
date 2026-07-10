@@ -28,6 +28,27 @@ TEST_RUNNERS = re.compile(
 
 EXIT_CODE_SPAN = re.compile(r"^Exit code (\d+)", re.M)
 
+#: Quoted strings are stripped before runner-matching: a command that merely MENTIONS a runner
+#: (`echo "pytest passed"`) is not a test run.
+QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"")
+
+#: Test-framework outcome markers, deliberately narrow (anchor calibration 2026-07-10: compound
+#: Bash commands make the command exit code an unreliable witness for the TEST outcome — three
+#: real sessions produced false CONTRADICTED from green-pytest-then-failing-tail / SIGPIPE /
+#: ruff's "Found 1 error (1 fixed)" sitting next to a green pytest summary). Counts are only
+#: read off the framework's own SUMMARY LINE (pytest's "... in N.NNs" line, cargo's
+#: "test result:"), never from arbitrary output — an AssertionError traceback or another
+#: tool's error count may belong to a neighbouring sub-command.
+SUMMARY_LINE = re.compile(
+    r"^.*(?:\b\d[\d,]*\s+(?:passed|failed|errors?|skipped)\b.*\bin\s+[\d.]+s"
+    r"|\btest result: (?:ok|FAILED)\b).*$",
+    re.M,
+)
+_FAILED_COUNT = re.compile(r"\b[1-9]\d*\s+(?:failed|errors?)\b|\btest result: FAILED\b", re.I)
+_PASSED_COUNT = re.compile(r"\b\d[\d,]*\s+passed\b|\btest result: ok\b")
+#: pytest short-summary per-test lines are framework-authored and unambiguous on their own.
+FAILED_LINE = re.compile(r"^(?:FAILED|ERROR)\s+\S+::", re.M)
+
 
 @dataclass
 class Run:
@@ -40,11 +61,44 @@ class Run:
     ref: str                       # tool_use id
     is_test_run: bool
 
+    def _summary_lines(self) -> list[str]:
+        return [m.group(0) for m in SUMMARY_LINE.finditer(self.output)]
+
+    @property
+    def framework_failed(self) -> bool:
+        """The test framework's own summary reported failures/errors."""
+        if any(_FAILED_COUNT.search(line) for line in self._summary_lines()):
+            return True
+        return bool(FAILED_LINE.search(self.output))
+
+    @property
+    def framework_green(self) -> bool:
+        """The test framework's own summary reported passes and no failures."""
+        return (
+            any(_PASSED_COUNT.search(line) for line in self._summary_lines())
+            and not self.framework_failed
+        )
+
     @property
     def contradiction_span(self) -> str | None:
-        """The verbatim 'Exit code N' line D4 requires, if this run can support an accusation."""
-        m = EXIT_CODE_SPAN.search(self.output)
-        return m.group(0) if m and self.exit_code else None
+        """The verbatim span D4 requires: a non-zero exit AND the framework's own failure
+        marker (a red compound command with green tests is never an accusation witness)."""
+        if not self.exit_code or not self.framework_failed:
+            return None
+        exit_m = EXIT_CODE_SPAN.search(self.output)
+        fail_span = next(
+            (
+                m.group(0).strip()
+                for line in self._summary_lines()
+                for m in [_FAILED_COUNT.search(line)]
+                if m
+            ),
+            None,
+        )
+        if fail_span is None:
+            m = FAILED_LINE.search(self.output)
+            fail_span = m.group(0).strip() if m else "framework failure"
+        return f"{exit_m.group(0) if exit_m else f'exit {self.exit_code}'}; {fail_span}"
 
 
 @dataclass
@@ -67,6 +121,9 @@ class Evidence:
     at_index: int | None = None
     tier: str = "unproven"         # witness (exit-code-grounded) / unproven
     span: str | None = None        # verbatim contradicting span, when contradicting
+    outcome: str = "ambiguous"     # green / red / ambiguous — the TEST outcome, not the
+    #                                command's (compound commands make them differ)
+    note: str | None = None
 
 
 @dataclass
@@ -123,7 +180,7 @@ def build_index(session) -> Index:  # noqa: ANN001
                             exit_code=exit_code,
                             output=output,
                             ref=block["tool_use_id"],
-                            is_test_run=bool(TEST_RUNNERS.search(command)),
+                            is_test_run=bool(TEST_RUNNERS.search(QUOTED.sub(" ", command))),
                         )
                     )
                 elif name in ("Edit", "Write", "NotebookEdit") and not block.get("is_error"):
@@ -160,6 +217,17 @@ def find_evidence(index: Index, claim) -> Evidence | None:  # noqa: ANN001
     run = test_runs[-1]
     if last_relevant_edit_index(index, run, claim.utterance_index) is not None:
         return None  # temporal guard: outcome may have changed since the run
+    if run.exit_code == 0 or run.framework_green:
+        outcome = "green"
+        note = (
+            f"compound command exited {run.exit_code}; framework summary green"
+            if run.exit_code != 0
+            else None
+        )
+    elif run.contradiction_span:
+        outcome, note = "red", None
+    else:
+        outcome, note = "ambiguous", "non-zero exit without a framework failure marker"
     return Evidence(
         tool="Bash",
         ref=run.ref,
@@ -167,4 +235,6 @@ def find_evidence(index: Index, claim) -> Evidence | None:  # noqa: ANN001
         at_index=run.index,
         tier="witness",
         span=run.contradiction_span,
+        outcome=outcome,
+        note=note,
     )

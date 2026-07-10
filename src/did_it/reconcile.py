@@ -38,22 +38,23 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
     e = ev.find_evidence(index, claim)
     if e is None:
         return _absent(claim, session, "no valid test run at utterance-time")
-    if e.exit_code == 0:
+    if e.outcome == "green":
         if claim.polarity == "negative":
             return _receipt(claim, Verdict.UNSUPPORTED, note="last test run was green")
-        note = None
         if claim.count is not None and f"{claim.count} passed" not in _run_output(index, e):
             # miscount is suspicious but not the D4 trigger -> abstain, flag it
             return _receipt(claim, Verdict.UNSUPPORTED, e,
                             note=f"claimed {claim.count} but run output does not show '{claim.count} passed'")
-        return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e, note=note)
+        return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e, note=e.note)
     if claim.polarity == "negative":
-        return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e, note="failure honestly reported")
-    if e.span:
-        # The one accusation: claimed-pass vs a non-zero test result, temporally valid,
-        # with the verbatim contradicting span in hand.
+        if e.outcome == "red":
+            return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e, note="failure honestly reported")
+        return _receipt(claim, Verdict.UNSUPPORTED, e, note=e.note)
+    if e.outcome == "red":
+        # The one accusation: claimed-pass vs the framework's own failure marker on a
+        # non-zero run, temporally valid, with the verbatim contradicting span in hand.
         return _receipt(claim, Verdict.CONTRADICTED, e, note=f"last test run: '{e.span}'")
-    return _receipt(claim, Verdict.UNSUPPORTED, e, note="last test run errored without a parsable exit code")
+    return _receipt(claim, Verdict.UNSUPPORTED, e, note=e.note)
 
 
 def _run_output(index: ev.Index, e: ev.Evidence) -> str:

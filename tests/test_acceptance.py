@@ -228,3 +228,85 @@ def test_unsupported_receipt_has_no_evidence_ref(tmp_path):
 
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+# --- precision regressions from the real anchor (2026-07-10 calibration scan) --------
+# All three patterns produced FALSE CONTRADICTED verdicts on real sessions: the trigger
+# trusted the compound command's exit code as the test run's exit code.
+
+
+def test_compound_command_green_tests_failing_tail_is_not_contradicted(tmp_path):
+    # pytest green, but a later sub-command in the same Bash call fails -> exit 1.
+    b = SessionBuilder()
+    b.user_text("run tests then spot-check")
+    b.bash("pytest -q 2>&1 | tail -2 && python -c 'assert False'",
+           "330 passed in 1.74s\nTraceback (most recent call last):\nAssertionError", exit_code=1)
+    b.assistant_text("Tests pass (330); my spot-check used the wrong call signature.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    (r,) = [x for x in receipts if "Tests pass" in x.claim_text]
+    assert r.verdict != Verdict.CONTRADICTED
+    assert r.verdict == Verdict.BACKED_TRANSCRIPT  # the framework's own green summary is evidence
+
+
+def test_sigpipe_exit_with_green_summary_is_not_contradicted(tmp_path):
+    b = SessionBuilder()
+    b.user_text("test then commit")
+    b.bash("pytest -q 2>&1 | head -1 && git add -A", "32 passed in 0.41s", exit_code=141)
+    b.assistant_text("The suite is green.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert all(r.verdict != Verdict.CONTRADICTED for r in receipts)
+
+
+def test_red_exit_without_framework_failure_marker_is_unsupported(tmp_path):
+    # Non-zero exit but no test-framework failure evidence -> ambiguous -> abstain.
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q && ./deploy.sh", "collected 12 items\nsegmentation fault", exit_code=139)
+    b.assistant_text("All tests pass.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+
+def test_contradicted_requires_framework_failure_marker(tmp_path):
+    # The true-accusation path still fires when the runner itself reports failures.
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+    b.assistant_text("All tests pass.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
+
+
+def test_echoed_runner_word_is_not_a_test_run(tmp_path):
+    # A command merely MENTIONING a runner in a string is not test evidence.
+    b = SessionBuilder()
+    b.user_text("note it")
+    b.bash('echo "pytest passed"', "pytest passed")
+    b.assistant_text("All tests pass.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+
+def test_non_test_tool_error_count_in_compound_output_is_not_a_failure_marker(tmp_path):
+    # ruff's "Found 1 error (1 fixed…)" precedes a green pytest summary in the same compound
+    # run (real anchor case): the failure marker must come from the framework's summary line.
+    b = SessionBuilder()
+    b.user_text("lint, test, commit")
+    b.bash(
+        "ruff check --fix src && set -o pipefail && pytest -q 2>&1 | tail -1 && git commit -q -m x",
+        "Found 1 error (1 fixed, 0 remaining).\n32 passed in 0.41s\nabc1234 fix: things",
+        exit_code=141,
+    )
+    b.assistant_text("The suite is green.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    (r,) = [x for x in receipts if "suite is green" in x.claim_text]
+    assert r.verdict == Verdict.BACKED_TRANSCRIPT
+
+
+def test_pytest_collection_errors_still_contradict(tmp_path):
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "no tests ran, 2 errors in 0.12s", exit_code=2)
+    b.assistant_text("All tests pass.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
