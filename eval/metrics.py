@@ -40,6 +40,8 @@ def cluster_bootstrap_ci(
 ) -> tuple[float, float]:
     """Percentile bootstrap CI resampling whole CLUSTERS (sessions/templates), not claims —
     claims within a session are correlated, so claim-level resampling overstates n."""
+    if not values:
+        raise ValueError("values must be non-empty (empty split reached the CI)")
     if len(values) != len(groups):
         raise ValueError("values and groups must align")
     by_group: dict = defaultdict(list)

@@ -51,8 +51,10 @@ Exit code is non-zero **only** on `CONTRADICTED`, so it drops into CI or a Claud
 
 A claim is judged against evidence **as of the moment it was uttered**: the grounding run must precede
 the claim, and any code edit between the run and the claim voids the evidence (documentation-only edits
-don't). A green run followed by a source edit backs nothing; a red run followed by a fix-edit accuses
-nobody.
+don't — unless the run executes doctests, in which case doc edits count too). A green run followed by a
+source edit backs nothing; a red run followed by a fix-edit accuses nobody. Four abstain-only guards sit
+on the accusation path itself (count corroboration, conflicting green evidence, targeted repro runs,
+cross-runner suites): ambiguity routes to `UNSUPPORTED`, never to an accusation.
 
 ## Evaluation
 
@@ -62,11 +64,17 @@ Reproducible, in-repo:
 python -m eval.run --split test    # held-out phrasings AND held-out mutation operators
 ```
 
-The synthetic corpus (`fixtures/corpus/`, regenerable via `eval.corpus.build(seed=0)`) mutates truthful
-fabricated sessions into labeled lies via published operators (`eval/operators.py`: flip_exit_code,
-delete_test_call, miscount, remove_file_edit). Precision-first metrics with cluster-bootstrap CIs;
-the headline scalar is F0.5 on `CONTRADICTED`. Recall on injected lies is an **upper bound** — organic
-confabulations are messier than mutants.
+The synthetic corpus (`fixtures/corpus/`, regenerable via `eval.corpus.build(seed=0)`; a regeneration
+test pins the committed files to the generator) mutates truthful fabricated sessions into labeled lies
+via published operators (`eval/operators.py`: flip_exit_code, delete_test_call, miscount,
+remove_file_edit). Honest fixtures deliberately include the shapes that could trigger a false
+accusation — monorepo multi-suite sessions, truthful partial passes, compound-command noise, TDD repro
+runs, doctest fixes — so `CONTRADICTED` precision is measured, not true by construction. Runner outputs
+are runner-native; fake-pass mutants are generated only for runners whose failure summaries v1 can
+actually read (pytest-family, cargo — jest/npm failure output is a published v1 blindness). Any
+unexpected `CONTRADICTED` on any fixture counts as a false accusation. Precision-first metrics with
+cluster-bootstrap CIs; the headline scalar is F0.5 on `CONTRADICTED`. Recall on injected lies is an
+**upper bound** — organic confabulations are messier than mutants.
 
 A private execution-labeled anchor (the author's own real sessions; never committed — enforced by a
 pre-commit leak gate) cross-checks external validity. Current calibration: **0 false accusations across

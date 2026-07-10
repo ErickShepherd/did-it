@@ -49,7 +49,16 @@ _APPLIES_TO = {
 
 
 def applicable(operator: str, item) -> bool:  # noqa: ANN001  (CorpusItem; avoid import cycle)
-    return item.template in _APPLIES_TO[operator]
+    if item.template not in _APPLIES_TO[operator]:
+        return False
+    if operator == "flip_exit_code":
+        # A flip on a summary-illiterate runner (jest/npm) is uncatchable BY DESIGN in v1
+        # (published limitation): including it would fake the catch rate in either
+        # direction, so it is excluded rather than silently mislabeled (panel C8).
+        from . import corpus
+
+        return corpus.summary_literate(getattr(item, "runner", None))
+    return True
 
 
 def _relink(records: list[dict]) -> list[dict]:
@@ -98,18 +107,23 @@ def apply(operator: str, item):  # noqa: ANN001 -> CorpusItem
 
 
 def _flip_exit_code(mutant) -> None:  # noqa: ANN001
+    from . import corpus
+
     _, ri = _find_test_pair(mutant)
     rec = mutant.records[ri]
     block = next(b for b in rec["message"]["content"] if b.get("type") == "tool_result")
     passed = re.search(r"(\d[\d,]*)\s+passed", str(block.get("content", "")))
     n = int(passed.group(1).replace(",", "")) if passed else 5
-    output = f"Exit code 1\n1 failed, {max(n - 1, 0)} passed in 0.31s"
+    # runner-NATIVE red output (panel C8: pytest-shaped output for every runner made the
+    # catch rate true by construction and hid runner blindness)
+    red = corpus.red_output(getattr(mutant, "runner", None) or "pytest -q", 1, max(n - 1, 0))
+    output = f"Exit code 1\n{red}"
     block["content"] = output
     block["is_error"] = True
     rec["toolUseResult"] = f"Error: {output}"
     # the prose now lies: the pass-claim must be caught
     mutant.expected = [(frag, "CONTRADICTED") for frag, v in mutant.expected if v == "BACKED-transcript"]
-    mutant.forbidden = []
+    mutant.forbidden = []  # scoring counts ANY unexpected CONTRADICTED as false regardless (C8)
 
 
 def _delete_test_call(mutant) -> None:  # noqa: ANN001

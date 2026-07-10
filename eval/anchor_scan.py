@@ -44,7 +44,7 @@ def main(argv: list[str]) -> int:
     verdicts: Counter[str] = Counter()
     kinds: Counter[str] = Counter()
     sessions = parsed = with_claims = contradicted_sessions = 0
-    samples: list[tuple[str, str, str]] = []
+    samples: list[tuple[str, str]] = []
     misses: list[str] = []
 
     for fp in files:
@@ -66,7 +66,7 @@ def main(argv: list[str]) -> int:
         for r in receipts:
             verdicts[r.verdict.value] += 1
             if show_samples and len(samples) < 60:
-                samples.append((r.verdict.value, kinds and "", r.claim_text[:110]))
+                samples.append((r.verdict.value, r.claim_text[:110]))
         if show_misses and len(misses) < 60:
             gated = {c.text for c in claims}
             for idx, rec in enumerate(session.records):
@@ -90,7 +90,7 @@ def main(argv: list[str]) -> int:
         print(f"informative-verdict rate: {informative}/{total} = {informative / total:.0%}")
     if show_samples:
         print("\n--- extracted claim samples (verdict · claim) ---")
-        for v, _, text in samples:
+        for v, text in samples:
             print(f"  {v:<18} {text}")
     if show_misses:
         print("\n--- claim-ish sentences NOT gated (recall candidates) ---")

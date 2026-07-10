@@ -41,16 +41,18 @@ def score_item(item: corpus.CorpusItem, receipts: list) -> dict:
         hits = [r for r in receipts if fragment in r.claim_text]
         if any(r.verdict.value == expected for r in hits):
             matched += 1
-    false_contradicted = 0
-    if "CONTRADICTED" in item.forbidden:
-        false_contradicted = got.get("CONTRADICTED", 0)
+    # ANY accusation not matching an expected-CONTRADICTED fragment is a false accusation,
+    # on EVERY item — the old forbidden-list gate let a stray CONTRADICTED inside a flip
+    # session (forbidden=[]) count as nothing (panel C8).
+    expected_contra = [f for f, v in item.expected if v == "CONTRADICTED"]
+    got_contra = [r for r in receipts if r.verdict.value == "CONTRADICTED"]
     true_contradicted = sum(
-        1
-        for fragment, expected in item.expected
-        if expected == "CONTRADICTED"
-        and any(fragment in r.claim_text and r.verdict.value == "CONTRADICTED" for r in receipts)
+        1 for f in expected_contra if any(f in r.claim_text for r in got_contra)
     )
-    expected_contradicted = sum(1 for _, v in item.expected if v == "CONTRADICTED")
+    false_contradicted = sum(
+        1 for r in got_contra if not any(f in r.claim_text for f in expected_contra)
+    )
+    expected_contradicted = len(expected_contra)
     return {
         "session": item.session_id,
         "operator": item.operator,
@@ -65,11 +67,14 @@ def score_item(item: corpus.CorpusItem, receipts: list) -> dict:
 
 
 def report(rows: list[dict]) -> dict:
+    if not rows:
+        return {"sessions": 0, "note": "empty split — no metrics computed"}
     tp = sum(r["true_contradicted"] for r in rows)
     fp = sum(r["false_contradicted"] for r in rows)
     fn = sum(r["expected_contradicted"] - r["true_contradicted"] for r in rows)
-    precision = tp / (tp + fp) if tp + fp else 1.0
-    recall = tp / (tp + fn) if tp + fn else 1.0
+    # undefined is None, never a fabricated perfect score (panel C8)
+    precision = tp / (tp + fp) if tp + fp else None
+    recall = tp / (tp + fn) if tp + fn else None
 
     fake = [r for r in rows if r["operator"] == "flip_exit_code"]
     fake_caught = sum(1 for r in fake if r["true_contradicted"] > 0)
@@ -87,8 +92,12 @@ def report(rows: list[dict]) -> dict:
     return {
         "sessions": len(rows),
         "label_match_rate": sum(r["matched"] for r in rows) / max(sum(r["labels"] for r in rows), 1),
-        "contradicted": {"precision": precision, "recall": recall,
-                         "f0.5": metrics.f_beta(precision, recall, 0.5)},
+        "contradicted": {
+            "precision": precision,
+            "recall": recall,
+            "f0.5": (metrics.f_beta(precision, recall, 0.5)
+                     if precision is not None and recall is not None else None),
+        },
         "fake_pass_catch": {"caught": fake_caught, "of": len(fake),
                             "rate": fake_caught / len(fake) if fake else None},
         "backed_coverage_green_runs": {"backed": green_backed, "of": len(green),
