@@ -172,6 +172,34 @@ class TestSelectorForms:
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
 
+    def test_selector_boolean_operators_are_not_target_tokens(self, tmp_path):
+        # -k "a and b": the operator 'and' appears in almost any claim; if it counted as
+        # a target token the claim would "name the target" and the subset run would accuse.
+        b = SessionBuilder()
+        b.user_text("run the two new tests")
+        b.bash('pytest -k "test_new and test_edge" -q', "1 failed in 0.05s", exit_code=1)
+        b.assistant_text("The existing tests pass and the new feature works.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "existing tests pass") == Verdict.UNSUPPORTED
+
+    def test_redirect_target_is_not_a_scope(self, tmp_path):
+        # `pytest -q > results.py` is a FULL red run; the redirect file is not a scope
+        # and must not suppress the accusation.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q > results.py", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("All tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
+
+    def test_plugin_flag_value_is_not_a_scope(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q -p myplugin.py", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("All tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
+
     def test_go_run_selector_marks_the_run_targeted(self, tmp_path):
         b = SessionBuilder()
         b.user_text("run the repro")

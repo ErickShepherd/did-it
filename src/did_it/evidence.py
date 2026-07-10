@@ -321,8 +321,14 @@ _TARGET_SELECT = re.compile(r"\s-(?:k|m|run)[= ]{0,8}(['\"]?)([\w~<>=. -]{1,256}
 _SELECT_SCAN_CAP = 4096
 _SELECT_STRADDLE = 16  # overlap window so a flag straddling the cap is still seen
 _TOKEN_LENGTH_CAP = 512
-#: Option values that name what a run EXCLUDES — never what it is scoped to.
-_EXCLUDE_FLAGS = frozenset({"--deselect", "--ignore", "--ignore-glob"})
+#: Option values that name what a run EXCLUDES or configures — never what it is scoped to.
+_NON_SCOPE_FLAGS = frozenset({
+    "--deselect", "--ignore", "--ignore-glob",
+    "-p", "-c", "-o", "-W", "--rootdir", "--confcutdir", "--junitxml", "--log-file",
+})
+#: Tokens generic enough to appear in ANY honest claim: counting them as targets would
+#: make every claim "name the target" and un-suppress the accusation (false CONTRADICTED).
+_GENERIC_TOKENS = frozenset({"test", "tests", "and", "or", "not"})
 
 
 def summary_passed_count(run: Run) -> int | None:
@@ -362,7 +368,13 @@ def target_tokens(command: str) -> set[str]:
     args = clause[m.end():] if m else clause
     out: set[str] = set()
     for sel in _TARGET_SELECT.finditer(args[:_SELECT_SCAN_CAP]):
-        out.update(w for w in re.findall(r"\w+", sel.group(2)) if len(w) >= 3)
+        # Selector operators (and/or/not) are excluded like generic segments below: they
+        # appear in almost any claim, which would read as naming the target and
+        # un-suppress the accusation (false CONTRADICTED — review round 3).
+        out.update(
+            w for w in re.findall(r"\w+", sel.group(2))
+            if len(w) >= 3 and w.lower() not in _GENERIC_TOKENS
+        )
     tail = args[max(0, _SELECT_SCAN_CAP - _SELECT_STRADDLE):]
     if len(args) > _SELECT_SCAN_CAP and ("-k" in tail or "-m" in tail or "-run" in tail):
         # A selector at/beyond the scan cap: mark the run targeted with a token no claim
@@ -370,9 +382,13 @@ def target_tokens(command: str) -> set[str]:
         out.add("\x00selector-beyond-scan-cap")
     prev = ""
     for tok in QUOTED.sub(" ", args).split():
-        is_flag_or_excluded = tok.startswith("-") or prev in _EXCLUDE_FLAGS
+        not_a_scope = (
+            tok[0] in "-><"                     # option, or a redirect target glued to > <
+            or prev in _NON_SCOPE_FLAGS         # value of an exclusion/config flag
+            or (prev and prev[-1] in "><")      # redirect target (>, >>, 2>, &>, <)
+        )
         prev = tok
-        if is_flag_or_excluded or len(tok) > _TOKEN_LENGTH_CAP:
+        if not_a_scope or len(tok) > _TOKEN_LENGTH_CAP:
             continue
         f = _TARGET_FILE_TOKEN.match(tok)
         if f:
@@ -384,7 +400,7 @@ def target_tokens(command: str) -> set[str]:
             # Generic segments ("tests") are excluded: any pass-claim contains them, which
             # would read as naming the target and un-suppress the accusation.
             out.update(
-                p for p in tok.split("::") if len(p) >= 3 and p.lower() not in ("test", "tests")
+                p for p in tok.split("::") if len(p) >= 3 and p.lower() not in _GENERIC_TOKENS
             )
     return out
 
