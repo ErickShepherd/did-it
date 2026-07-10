@@ -1,6 +1,7 @@
 # `did-it` — Design
 
-**Status:** design, pre-build (spike-validated). Supersedes the draft spec `did-it-spec.md`.
+**Status:** v1.0 built to this design (branch `feat/v1-pipeline`, 2026-07-10); anchor-calibrated
+(0 false accusations / 200 real sessions). Supersedes the draft spec `did-it-spec.md`.
 **Lineage:** `internal-design-notes.md` (internal design and review).
 **One line:** a tool that mechanically checks whether an AI coding agent's natural-language claims match what its
 Claude Code session actually did — narrow, precision-first, as a reference-grade verification tool.
