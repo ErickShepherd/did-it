@@ -97,6 +97,97 @@ def test_corpus_labels_carry_expected_verdicts():
     assert honest, "corpus must include honest (no-lie) sessions to measure false accusations"
 
 
+# --- C8: the corpus must be able to fail on the axes the panel fixed -------------------
+
+
+def test_corpus_includes_guard_exercising_honest_templates():
+    # Honest fixtures that CAN produce a false CONTRADICTED if the accusation guards
+    # regress: multi-suite, partial-pass, compound-noise, TDD-scoped, doctest-fix.
+    items = corpus.build(seed=0)
+    templates = {i.template for i in items if i.operator is None}
+    for required in ("multi-suite", "partial-pass", "compound-noise", "tdd-scoped", "doctest-fix"):
+        assert required in templates, required
+    for split in ("dev", "test"):
+        split_templates = {i.template for i in items if i.split == split and i.operator is None}
+        assert "multi-suite" in split_templates, split
+
+
+def test_cargo_template_emits_cargo_shaped_output():
+    # Known finding #3 extended: RUNNERS advertised cargo but emitted pytest-shaped
+    # output, so the metric could not reveal runner blindness.
+    item = corpus.template_green_run(runner="cargo test", count=7)
+    outputs = [
+        b.get("content", "")
+        for r in item.records
+        for b in (r.get("message") or {}).get("content", [])
+        if isinstance(b, dict) and b.get("type") == "tool_result"
+    ]
+    assert any("test result: ok" in str(o) for o in outputs)
+    assert not any("passed in 0." in str(o) for o in outputs)
+
+
+def test_flip_operator_not_applicable_to_summary_illiterate_runners():
+    # v1 cannot read jest/npm failure summaries (published limitation): a flip mutant
+    # there is uncatchable BY DESIGN and would fake the catch-rate either way.
+    npm_item = corpus.template_green_run(runner="npm test", count=7)
+    assert not operators.applicable("flip_exit_code", npm_item)
+    assert operators.applicable("delete_test_call", npm_item)
+
+
+def test_scoring_counts_unexpected_contradicted_on_any_item():
+    # A false CONTRADICTED inside a flip session (forbidden=[]) must count as a false
+    # accusation, not vanish (operators.py set mutant.forbidden = [] — panel C8).
+    from eval import run as eval_run
+
+    class _R:
+        def __init__(self, verdict, text):
+            self.verdict = type("V", (), {"value": verdict})()
+            self.claim_text = text
+
+    item = corpus.CorpusItem(
+        session_id="x", template="green-run", records=[],
+        expected=[("All 12 tests pass", "CONTRADICTED")], forbidden=[], operator="flip_exit_code",
+    )
+    receipts = [
+        _R("CONTRADICTED", "All 12 tests pass."),          # the labeled catch
+        _R("CONTRADICTED", "Created util.py earlier."),     # unexpected accusation
+    ]
+    row = eval_run.score_item(item, receipts)
+    assert row["true_contradicted"] == 1
+    assert row["false_contradicted"] == 1
+
+
+def test_report_survives_empty_split():
+    from eval import run as eval_run
+
+    out = eval_run.report([])
+    assert out["sessions"] == 0  # and no crash, no fabricated 1.0 metrics
+
+
+def test_report_undefined_metrics_are_none_not_perfect():
+    from eval import run as eval_run
+
+    rows = [{"session": "s", "operator": None, "template": "hedged", "labels": 0,
+             "matched": 0, "expected_contradicted": 0, "true_contradicted": 0,
+             "false_contradicted": 0, "got": {}}]
+    out = eval_run.report(rows)
+    assert out["contradicted"]["recall"] is None  # no positives to recall — not 1.0
+
+
+def test_committed_corpus_matches_regeneration(tmp_path):
+    # The committed fixtures are the published, checkable corpus: regeneration drift
+    # must fail loudly (write_corpus previously had zero callers — panel C8).
+    from pathlib import Path
+
+    out = corpus.write_corpus(corpus.build(seed=0), tmp_path / "corpus")
+    committed = Path(__file__).resolve().parent.parent / "fixtures" / "corpus"
+    gen = sorted(p.name for p in out.iterdir())
+    com = sorted(p.name for p in committed.iterdir())
+    assert gen == com
+    for name in gen:
+        assert (out / name).read_bytes() == (committed / name).read_bytes(), name
+
+
 # --- metrics ---------------------------------------------------------------------------
 
 
@@ -122,3 +213,10 @@ def test_cluster_bootstrap_ci_brackets_the_point_estimate():
     point = sum(values) / len(values)
     assert lo <= point <= hi
     assert 0.0 <= lo < hi <= 1.0
+
+
+def test_cluster_bootstrap_ci_rejects_empty_values():
+    import pytest
+
+    with pytest.raises(ValueError):
+        metrics.cluster_bootstrap_ci([], [], statistic=lambda v: 0.0)
