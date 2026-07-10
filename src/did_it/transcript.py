@@ -3,36 +3,114 @@
 Design: docs/design/did-it.md — D5 (sidechains -> v1.1), Risks (schema drift), "NOT-EVALUABLE".
 Hard rule: an unknown or partially-parsed schema fails CLOSED to NOT-EVALUABLE, never to a verdict.
 
-Not implemented — scaffolding only.
+Schema notes (measured on real transcripts, spike 2026-07-09 + build-time recon):
+  * One JSON object per line. Message records have type "assistant" / "user"; other types
+    (queue-operation, ai-title, file-history-snapshot, attachment, system, ...) are skipped.
+  * Message records carry a per-record `version` (Claude Code release). Core fields
+    (message.content block types text / thinking / tool_use / tool_result) are stable across
+    2.1.156-2.1.205; anything outside the pinned range fails closed.
+  * Assistant tool_use blocks pair with the tool_result block (matched by tool_use_id) in a
+    subsequent user record. Failed Bash runs set is_error=true and prefix content "Exit code N".
+  * `isSidechain: true` records and any Task tool_use mark subagent activity (not ingested in v1).
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-#: Claude Code transcript schema versions this build is validated against (design: version pin).
-#: Populated during the build from the multi-version CI fixtures; empty here.
-SUPPORTED_SCHEMA_VERSIONS: tuple[str, ...] = ()
+#: Inclusive range of Claude Code schema versions this build is validated against. The spike
+#: parsed 10 distinct versions across 2.1.156-2.1.204 with one parser; 2.1.205 verified at
+#: build time. Outside this range -> UnknownSchema -> NOT-EVALUABLE (never guess).
+SUPPORTED_SCHEMA_RANGE: tuple[tuple[int, int, int], tuple[int, int, int]] = ((2, 1, 156), (2, 1, 205))
+
+#: Endpoints of the validated range (scaffold-API compatibility).
+SUPPORTED_SCHEMA_VERSIONS: tuple[str, ...] = ("2.1.156", "2.1.205")
+
+MESSAGE_TYPES = frozenset({"assistant", "user"})
 
 
 class UnknownSchema(Exception):
-    """Raised when a transcript's `version` is outside SUPPORTED_SCHEMA_VERSIONS (-> NOT-EVALUABLE)."""
+    """Raised when a transcript's schema is outside the validated range (-> NOT-EVALUABLE)."""
+
+
+class ParseFailure(Exception):
+    """Raised when a transcript is only partially parseable (-> NOT-EVALUABLE)."""
+
+
+def _version_tuple(v: str) -> tuple[int, int, int] | None:
+    parts = v.split(".")
+    if len(parts) != 3 or not all(p.isdigit() for p in parts):
+        return None
+    return (int(parts[0]), int(parts[1]), int(parts[2]))
+
+
+def is_supported_version(v: str) -> bool:
+    t = _version_tuple(v)
+    if t is None:
+        return False
+    lo, hi = SUPPORTED_SCHEMA_RANGE
+    return lo <= t <= hi
 
 
 @dataclass
 class Session:
-    """Parsed transcript. Structure only."""
+    """Parsed transcript: ordered message records plus the facts reconciliation needs."""
 
     path: Path
     schema_version: str | None = None
-    records: list[dict] = field(default_factory=list)   # ordered events
-    used_subagents: bool = False                         # Task tool present -> sidechain evidence (v1.1)
+    records: list[dict] = field(default_factory=list)   # ordered assistant/user message records
+    used_subagents: bool = False                        # Task tool_use or sidechain records present
+
+    def content_blocks(self, index: int) -> list[dict]:
+        """The message content blocks of record `index` ([] if malformed)."""
+        m = self.records[index].get("message")
+        c = m.get("content") if isinstance(m, dict) else None
+        return [b for b in c if isinstance(b, dict)] if isinstance(c, list) else []
 
 
 def parse(path: str | Path) -> Session:
-    """Parse a transcript file into a Session. Fail closed on unknown schema.
+    """Parse a transcript file into a Session.
 
-    Not implemented.
+    Raises UnknownSchema / ParseFailure (both -> NOT-EVALUABLE upstream); OSError propagates
+    to the CLI as a usage error. Never silently drops an unreadable message line.
     """
-    raise NotImplementedError
+    path = Path(path)
+    session = Session(path=path)
+    with path.open(encoding="utf-8") as fh:
+        for lineno, line in enumerate(fh, 1):
+            if not line.strip():
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError as e:
+                raise ParseFailure(f"{path.name}:{lineno}: unparseable line") from e
+            if not isinstance(rec, dict):
+                raise ParseFailure(f"{path.name}:{lineno}: non-object record")
+            if rec.get("type") not in MESSAGE_TYPES:
+                continue  # queue-operation / ai-title / fixture-marker / etc.
+
+            version = rec.get("version")
+            if not isinstance(version, str) or not is_supported_version(version):
+                raise UnknownSchema(f"{path.name}:{lineno}: schema version {version!r}")
+            session.schema_version = session.schema_version or version
+
+            message = rec.get("message")
+            if not isinstance(message, dict) or not isinstance(message.get("content"), (list, str)):
+                raise ParseFailure(f"{path.name}:{lineno}: message without content")
+
+            if rec.get("isSidechain"):
+                session.used_subagents = True
+                continue  # sidechain records are not ingested in v1 (D5)
+
+            session.records.append(rec)
+            for block in _blocks(message):
+                if block.get("type") == "tool_use" and block.get("name") == "Task":
+                    session.used_subagents = True
+    return session
+
+
+def _blocks(message: dict) -> list[dict]:
+    c = message.get("content")
+    return [b for b in c if isinstance(b, dict)] if isinstance(c, list) else []

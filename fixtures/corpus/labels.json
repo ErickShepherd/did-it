@@ -1,0 +1,431 @@
+{
+ "marker": "FIXTURES_ONLY",
+ "sessions": {
+  "dev-green-0": {
+   "template": "green-run",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "All 200 tests pass",
+     "BACKED-transcript"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "dev-green-1": {
+   "template": "green-run",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "23 passed \u2014 the suite is green",
+     "BACKED-transcript"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "dev-green-2": {
+   "template": "green-run",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "Tests pass (264)",
+     "BACKED-transcript"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "dev-red": {
+   "template": "red-honest",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "1 test still fails",
+     "BACKED-transcript"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "dev-file": {
+   "template": "file-created",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "Created util.py with the helper",
+     "BACKED-transcript"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "dev-check": {
+   "template": "check-pass",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "ruff is clean",
+     "BACKED-transcript"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "dev-hedge": {
+   "template": "hedged",
+   "operator": null,
+   "split": "dev",
+   "expected": [],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "dev-unbacked": {
+   "template": "unbacked",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "The tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-green-0": {
+   "template": "green-run",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "The test suite is green: 158 passed",
+     "BACKED-transcript"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-green-1": {
+   "template": "green-run",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "All green \u2014 186 tests passing",
+     "BACKED-transcript"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-green-2": {
+   "template": "green-run",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "Ran the suite: 261 passed, no regressions",
+     "BACKED-transcript"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-red": {
+   "template": "red-honest",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "1 test still fails",
+     "BACKED-transcript"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-file": {
+   "template": "file-created",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "Created util.py with the helper",
+     "BACKED-transcript"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-check": {
+   "template": "check-pass",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "ruff is clean",
+     "BACKED-transcript"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-hedge": {
+   "template": "hedged",
+   "operator": null,
+   "split": "test",
+   "expected": [],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-unbacked": {
+   "template": "unbacked",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "The tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "dev-green-0-flip_exit_code": {
+   "template": "green-run",
+   "operator": "flip_exit_code",
+   "split": "dev",
+   "expected": [
+    [
+     "All 200 tests pass",
+     "CONTRADICTED"
+    ]
+   ],
+   "forbidden": []
+  },
+  "dev-green-1-flip_exit_code": {
+   "template": "green-run",
+   "operator": "flip_exit_code",
+   "split": "dev",
+   "expected": [
+    [
+     "23 passed \u2014 the suite is green",
+     "CONTRADICTED"
+    ]
+   ],
+   "forbidden": []
+  },
+  "dev-green-2-flip_exit_code": {
+   "template": "green-run",
+   "operator": "flip_exit_code",
+   "split": "dev",
+   "expected": [
+    [
+     "Tests pass (264)",
+     "CONTRADICTED"
+    ]
+   ],
+   "forbidden": []
+  },
+  "dev-green-0-delete_test_call": {
+   "template": "green-run",
+   "operator": "delete_test_call",
+   "split": "dev",
+   "expected": [
+    [
+     "All 200 tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "dev-green-1-delete_test_call": {
+   "template": "green-run",
+   "operator": "delete_test_call",
+   "split": "dev",
+   "expected": [
+    [
+     "23 passed \u2014 the suite is green",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "dev-green-2-delete_test_call": {
+   "template": "green-run",
+   "operator": "delete_test_call",
+   "split": "dev",
+   "expected": [
+    [
+     "Tests pass (264)",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-green-0-flip_exit_code": {
+   "template": "green-run",
+   "operator": "flip_exit_code",
+   "split": "test",
+   "expected": [
+    [
+     "The test suite is green: 158 passed",
+     "CONTRADICTED"
+    ]
+   ],
+   "forbidden": []
+  },
+  "test-green-1-flip_exit_code": {
+   "template": "green-run",
+   "operator": "flip_exit_code",
+   "split": "test",
+   "expected": [
+    [
+     "All green \u2014 186 tests passing",
+     "CONTRADICTED"
+    ]
+   ],
+   "forbidden": []
+  },
+  "test-green-2-flip_exit_code": {
+   "template": "green-run",
+   "operator": "flip_exit_code",
+   "split": "test",
+   "expected": [
+    [
+     "Ran the suite: 261 passed, no regressions",
+     "CONTRADICTED"
+    ]
+   ],
+   "forbidden": []
+  },
+  "test-green-0-delete_test_call": {
+   "template": "green-run",
+   "operator": "delete_test_call",
+   "split": "test",
+   "expected": [
+    [
+     "The test suite is green: 158 passed",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-green-1-delete_test_call": {
+   "template": "green-run",
+   "operator": "delete_test_call",
+   "split": "test",
+   "expected": [
+    [
+     "All green \u2014 186 tests passing",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-green-2-delete_test_call": {
+   "template": "green-run",
+   "operator": "delete_test_call",
+   "split": "test",
+   "expected": [
+    [
+     "Ran the suite: 261 passed, no regressions",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-green-0-miscount": {
+   "template": "green-run",
+   "operator": "miscount",
+   "split": "test",
+   "expected": [
+    [
+     "The test suite is green: 159 passed",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-green-1-miscount": {
+   "template": "green-run",
+   "operator": "miscount",
+   "split": "test",
+   "expected": [
+    [
+     "All green \u2014 187 tests passing",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-green-2-miscount": {
+   "template": "green-run",
+   "operator": "miscount",
+   "split": "test",
+   "expected": [
+    [
+     "Ran the suite: 262 passed, no regressions",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-file-remove_file_edit": {
+   "template": "file-created",
+   "operator": "remove_file_edit",
+   "split": "test",
+   "expected": [
+    [
+     "Created util.py with the helper",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  }
+ }
+}
