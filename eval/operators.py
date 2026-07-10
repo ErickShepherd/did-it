@@ -58,6 +58,12 @@ def applicable(operator: str, item) -> bool:  # noqa: ANN001  (CorpusItem; avoid
         from . import corpus
 
         return corpus.summary_literate(getattr(item, "runner", None))
+    if operator == "miscount":
+        # Inflating a count only produces a catchable UNSUPPORTED if the runner's summary
+        # reports a count to drift from; go's package line has none (would stay BACKED).
+        from . import corpus
+
+        return corpus.count_literate(getattr(item, "runner", None))
     return True
 
 

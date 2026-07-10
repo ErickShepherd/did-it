@@ -525,34 +525,6 @@
     "CONTRADICTED"
    ]
   },
-  "test-green-1-miscount": {
-   "template": "green-run",
-   "operator": "miscount",
-   "split": "test",
-   "expected": [
-    [
-     "All green \u2014 187 tests passing",
-     "UNSUPPORTED"
-    ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
-   ]
-  },
-  "test-green-2-miscount": {
-   "template": "green-run",
-   "operator": "miscount",
-   "split": "test",
-   "expected": [
-    [
-     "Ran the suite: 115 passed, no regressions",
-     "UNSUPPORTED"
-    ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
-   ]
-  },
   "test-file-remove_file_edit": {
    "template": "file-created",
    "operator": "remove_file_edit",

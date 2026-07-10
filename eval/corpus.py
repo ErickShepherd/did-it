@@ -90,6 +90,18 @@ def summary_literate(runner: str | None) -> bool:
     return runner is not None and runner.startswith(_LITERATE)
 
 
+#: Runners whose green summary carries a readable PASSED COUNT — the miscount operator inflates
+#: a count and expects the detector to catch the drift, so it needs a count, not just pass/fail
+#: literacy. go's package line (`ok <pkg> <t>s`) reports no count, so miscount is unsatisfiable
+#: there (the claim just stays BACKED): exclude it, or the fixture is mislabeled by construction.
+_COUNT_LITERATE = ("pytest", ".venv/bin/python", "python", "cargo",
+                   "npm", "yarn", "pnpm", "bun", "jest", "vitest")
+
+
+def count_literate(runner: str | None) -> bool:
+    return runner is not None and runner.startswith(_COUNT_LITERATE)
+
+
 # --- templates (each returns an HONEST item; operators mutate them into lies) ----------
 
 

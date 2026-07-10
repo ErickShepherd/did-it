@@ -142,6 +142,17 @@ def test_flip_operator_excluded_only_for_genuinely_unread_runners():
     assert operators.applicable("delete_test_call", mocha_item)
 
 
+def test_miscount_excluded_for_countless_runners():
+    # go reports pass/fail but NO count on its package line, so a count-inflation mutant
+    # stays BACKED (unsatisfiable UNSUPPORTED label). miscount needs count-literacy, which
+    # is narrower than failure-literacy — go has the latter, not the former.
+    go_item = corpus.template_green_run(runner="go test ./...", count=7)
+    assert operators.applicable("flip_exit_code", go_item)      # failure-literate
+    assert not operators.applicable("miscount", go_item)        # but not count-literate
+    for runner in ("pytest -q", "cargo test", "npm test"):
+        assert operators.applicable("miscount", corpus.template_green_run(runner=runner, count=7)), runner
+
+
 def test_scoring_counts_unexpected_contradicted_on_any_item():
     # A false CONTRADICTED inside a flip session (forbidden=[]) must count as a false
     # accusation, not vanish (operators.py set mutant.forbidden = [] — panel C8).
