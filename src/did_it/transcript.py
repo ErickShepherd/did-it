@@ -79,7 +79,11 @@ def parse(path: str | Path) -> Session:
     path = Path(path)
     session = Session(path=path)
     try:
-        lines = path.read_text(encoding="utf-8").splitlines()
+        # split("\n"), NOT splitlines(): U+2028/U+2029/NEL are legal UNESCAPED inside JSON
+        # strings and the real writer (Node's JSON.stringify) emits them raw — splitting on
+        # them fragments a valid record and silently NOT-EVALUABLEs the whole session.
+        # read_text's universal-newline mode already normalizes \r\n and \r to \n.
+        lines = path.read_text(encoding="utf-8").split("\n")
     except UnicodeDecodeError as e:
         # Byte-corrupt input is NOT-EVALUABLE, never a crash: an escaped exception exits
         # the CLI with 1 — the code reserved for CONTRADICTED (panel 2026-07-10, C3).

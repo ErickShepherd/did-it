@@ -60,6 +60,19 @@ class TestInternalErrorBackstop:
 # --- C4: malformed block internals must not crash build_index --------------------------
 
 
+class TestJsonLegalSeparators:
+    def test_unicode_line_separator_in_prose_does_not_kill_the_session(self, tmp_path):
+        # U+2028/U+2029/NEL are legal UNESCAPED inside JSON strings and appear in real
+        # tool output; splitting on them fragments a valid line and silently turns the
+        # whole session NOT-EVALUABLE — masking every genuine verdict (review round 1).
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("All 12 tests pass. Details follow. And NEL:done.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.BACKED_TRANSCRIPT
+
+
 class TestMalformedBlocks:
     def test_non_dict_tool_input_does_not_crash(self, tmp_path):
         b = SessionBuilder()
