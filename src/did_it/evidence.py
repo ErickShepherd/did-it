@@ -473,9 +473,9 @@ def _tool_position_re(word: str) -> re.Pattern[str]:
     # env-prefix skip ([A-Z_]...=), silently unbinding real `CI=1 pytest`-style runs.
     return re.compile(
         rf"(?:^|[;|]|&&|\|\||\$\(|`)\s*(?:[A-Z_][A-Z0-9_]*=\S+\s+)*"
-        rf"(?:\S*/)?(?:{w}|python3?\s+-m\s+{w}|(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?{w})\b",
+        rf"(?:\S*/)?(?:{w}|python3?\s+-m\s+{w}|(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?{w})\b(?!=)",
         re.M | re.I,
-    )
+    )  # (?!=): an env-var NAME (`MYPY=1 pytest`) is not an invocation of the tool
 
 
 def runs_tool(command: str, word: str) -> bool:

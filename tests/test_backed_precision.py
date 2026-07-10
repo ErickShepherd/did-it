@@ -175,6 +175,16 @@ class TestNegationExemption:
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "mypy passes") == Verdict.BACKED_TRANSCRIPT
 
+    def test_env_var_name_is_not_an_invocation(self, tmp_path):
+        # Review round 2: `MYPY=1 pytest -q` runs pytest, not mypy — the uppercase env
+        # NAME must not bind the tool word under case-insensitive matching.
+        b = SessionBuilder()
+        b.user_text("run with mypy plugin enabled")
+        b.bash("MYPY=1 pytest -q", "12 passed in 0.30s")
+        b.assistant_text("mypy passes cleanly.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "mypy passes") == Verdict.UNSUPPORTED
+
     def test_honest_failure_report_is_still_backed(self, tmp_path):
         b = SessionBuilder()
         b.user_text("run the tests")
