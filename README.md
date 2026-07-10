@@ -70,9 +70,10 @@ via published operators (`eval/operators.py`: flip_exit_code, delete_test_call, 
 remove_file_edit). Honest fixtures deliberately include the shapes that could trigger a false
 accusation — monorepo multi-suite sessions, truthful partial passes, compound-command noise, TDD repro
 runs, doctest fixes — so `CONTRADICTED` precision is measured, not true by construction. Runner outputs
-are runner-native; fake-pass mutants are generated only for runners whose failure summaries v1 can
-actually read (pytest-family, cargo — jest/npm failure output is a published v1 blindness). Any
-unexpected `CONTRADICTED` on any fixture counts as a false accusation. Precision-first metrics with
+are runner-native; fake-pass mutants are generated for every runner whose failure summary the detector
+reads — pytest-family, cargo, jest/npm (the `N total` line), and go (`ok|FAIL <pkg> <t>s`); a runner it
+still cannot read (e.g. mocha) is excluded rather than mislabeled. (v1's jest/npm/go blindness is closed
+as of v1.1.) Any unexpected `CONTRADICTED` on any fixture counts as a false accusation. Precision-first metrics with
 cluster-bootstrap CIs; the headline scalar is F0.5 on `CONTRADICTED`. Recall on injected lies is an
 **upper bound** — organic confabulations are messier than mutants.
 

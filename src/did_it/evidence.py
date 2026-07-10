@@ -104,8 +104,24 @@ def is_test_command(command: str) -> bool:
 _SUMMARY_COUNTS = re.compile(r"\b\d[\d,]*\s+(?:passed|failed|errors?|skipped)\b")
 _SUMMARY_TIME = re.compile(r"\bin\s+[\d.]+s\b")
 _SUMMARY_CARGO = re.compile(r"\btest result: (?:ok|FAILED)\b")
-_FAILED_COUNT = re.compile(r"\b[1-9]\d*\s+(?:failed|errors?)\b|\btest result: FAILED\b", re.I)
-_PASSED_COUNT = re.compile(r"\b\d[\d,]*\s+passed\b|\btest result: ok\b")
+#: jest/npm literacy (v1.1): the jest summary carries the counts and an "N total" clause,
+#: but the duration is on a SEPARATE `Time:` line, so pytest's `in N.NNs` gate never
+#: matched it. (vitest's native `Tests 12 passed (12)` has no `N total` and stays unread →
+#: UNSUPPORTED, the safe direction — not claimed as covered.)
+#: "N total" is the framework-authored anchor that distinguishes the summary
+#: line from an incidental "1 failed" in prose. The trailing `(?!\s+\w)` keeps it to jest's
+#: end-of-clause `N total` and off prose like "100 total records" (shrinks the incidental
+#: accusation surface — round-1 review). Still per-line, still exit-gated for accusal.
+_SUMMARY_TOTAL = re.compile(r"\b\d[\d,]*\s+total\b(?!\s+\w)")
+#: go literacy (v1.1): go prints no counts — its summary is a package-result line
+#: `ok|FAIL <pkg> <t>s` (tab-separated), analogous to cargo's marker. The <pkg>+<duration>
+#: shape is what keeps a bare `FAIL` word (echoed logs, `--- FAIL:` per-test lines) from
+#: reading as a summary. `(cached)` results carry no duration and are covered by exit-0 alone.
+_SUMMARY_GO = re.compile(r"^(?:ok|FAIL)\s+\S+\s+[\d.]+s\b")
+_FAILED_COUNT = re.compile(
+    r"\b[1-9]\d*\s+(?:failed|errors?)\b|\btest result: FAILED\b|^FAIL\s+\S+\s+[\d.]+s\b", re.I
+)
+_PASSED_COUNT = re.compile(r"\b\d[\d,]*\s+passed\b|\btest result: ok\b|^ok\s+\S+\s+[\d.]+s\b")
 #: pytest short-summary per-test lines are framework-authored and unambiguous on their own.
 FAILED_LINE = re.compile(r"^(?:FAILED|ERROR)\s+\S+::", re.M)
 
@@ -115,8 +131,9 @@ def _is_summary_line(line: str) -> bool:
     # bound that can drop a genuine green summary re-opens the C2 false accusation
     # (review round 2 demonstrated exactly that with a 256KB tail cap).
     return bool(
-        (_SUMMARY_COUNTS.search(line) and _SUMMARY_TIME.search(line))
+        (_SUMMARY_COUNTS.search(line) and (_SUMMARY_TIME.search(line) or _SUMMARY_TOTAL.search(line)))
         or _SUMMARY_CARGO.search(line)
+        or _SUMMARY_GO.search(line)
     )
 
 
