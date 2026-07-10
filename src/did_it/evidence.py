@@ -394,7 +394,12 @@ def target_tokens(command: str) -> set[str]:
         if f:
             out.add(f.group(1).rsplit("/", 1)[-1])
             if f.group(2):
-                out.add(f.group(2))
+                # node ids get the same generic filter as the paths below — a class
+                # named `Test` is a substring of every honest claim (review round 4)
+                out.update(
+                    p for p in f.group(2).split("::")
+                    if len(p) >= 3 and p.lower() not in _GENERIC_TOKENS
+                )
         elif "::" in tok:
             # bare node path (cargo test tests::case) — targeted even without a file ext.
             # Generic segments ("tests") are excluded: any pass-claim contains them, which

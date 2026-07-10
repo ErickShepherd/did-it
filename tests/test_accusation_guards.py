@@ -182,6 +182,16 @@ class TestSelectorForms:
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "existing tests pass") == Verdict.UNSUPPORTED
 
+    def test_generic_class_node_id_does_not_unsuppress_the_guard(self, tmp_path):
+        # `…::Test` (a class literally named Test) lowercases to a substring of every
+        # honest claim; if it counted as a nameable target the guard would not fire.
+        b = SessionBuilder()
+        b.user_text("run the repro")
+        b.bash("pytest tests/test_mod.py::Test -q", "1 failed in 0.05s", exit_code=1)
+        b.assistant_text("The existing tests still pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "existing tests") == Verdict.UNSUPPORTED
+
     def test_redirect_target_is_not_a_scope(self, tmp_path):
         # `pytest -q > results.py` is a FULL red run; the redirect file is not a scope
         # and must not suppress the accusation.
