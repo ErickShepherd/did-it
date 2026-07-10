@@ -18,6 +18,7 @@ dev = ["pytest>=8", "ruff>=0.6"]
 
 [project.scripts]
 did-it = "did_it.cli:main"
+did-it-hook = "did_it.hook:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/did_it"]

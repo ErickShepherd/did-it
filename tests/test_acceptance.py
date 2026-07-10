@@ -310,3 +310,26 @@ def test_pytest_collection_errors_still_contradict(tmp_path):
     b.assistant_text("All tests pass.")
     receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
     assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
+
+
+# --- Stop hook: advisory in v1 (Rollout / Open questions) ----------------------------
+
+
+def test_stop_hook_is_advisory_even_on_contradiction(tmp_path, capsys):
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+    b.assistant_text("All tests pass.")
+    from did_it.hook import run_stop_hook
+
+    rc = run_stop_hook({"transcript_path": str(b.write_jsonl(tmp_path / "t.jsonl"))})
+    out = capsys.readouterr()
+    assert rc == 0  # advisory: NEVER blocks the stop, even with an accusation in hand
+    assert "CONTRADICTED" in out.out
+
+
+def test_stop_hook_tolerates_missing_transcript(tmp_path):
+    from did_it.hook import run_stop_hook
+
+    assert run_stop_hook({"transcript_path": str(tmp_path / "gone.jsonl")}) == 0
+    assert run_stop_hook({}) == 0
