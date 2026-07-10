@@ -19,7 +19,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--verify",
         metavar="REPO",
         default=None,
-        help="(v1.1) re-execute to upgrade in-transcript BACKED to BACKED-verified",
+        help="re-execute validated test commands in REPO to upgrade BACKED-transcript "
+             "to BACKED-verified (opt-in; runs pure test-runner invocations only)",
     )
     p.add_argument("--version", action="store_true", help="print version and exit")
     return p
@@ -35,14 +36,19 @@ def main(argv: list[str] | None = None) -> int:
     if not args.transcript:
         build_parser().error("the transcript argument is required")
 
+    import os
+
     import did_it
 
     from . import report
 
+    if args.verify is not None and not os.path.isdir(args.verify):
+        print(f"did-it: --verify REPO is not a directory: {args.verify}", file=sys.stderr)
+        return 2
     if args.verify:
-        print("did-it: --verify is a v1.1 upgrade; running transcript-only.", file=sys.stderr)
+        print(f"did-it: --verify re-executing validated test commands in {args.verify}", file=sys.stderr)
     try:
-        receipts = did_it.check(args.transcript)
+        receipts = did_it.check(args.transcript, verify_repo=args.verify)
     except OSError as e:
         print(f"did-it: cannot read transcript: {e}", file=sys.stderr)
         return 2
