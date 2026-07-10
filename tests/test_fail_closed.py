@@ -186,6 +186,21 @@ class TestOperatorFloodCommands:
         did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert time.monotonic() - t0 < 2.0
 
+    def test_subshell_and_backtick_floods_adjudicate_quickly(self, tmp_path):
+        # $( and ` are runner-matcher anchors too — review round 1 of this cap found
+        # both still quadratic (14s at 160KB) with only &&/;/|/newline counted.
+        import time as _t
+
+        for flood in ("$(" * 60_000, "`" * 60_000):
+            b = SessionBuilder()
+            b.user_text("run the tests")
+            b.bash(flood + " pytest -q", "1 failed in 0.30s", exit_code=1)
+            b.assistant_text("All tests pass.")
+            t0 = _t.monotonic()
+            receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+            assert _t.monotonic() - t0 < 2.0
+            assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
     def test_ordinary_compound_command_is_still_a_witness(self, tmp_path):
         b = SessionBuilder()
         b.user_text("run the tests")

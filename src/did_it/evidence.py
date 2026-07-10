@@ -67,10 +67,15 @@ _NON_EXECUTING = re.compile(
 
 
 def _strippable(command: str) -> bool:
-    """A command whose scan cost is bounded; anything else is never a witness (abstain)."""
+    """A command whose scan cost is bounded; anything else is never a witness (abstain).
+
+    The count must cover EVERY anchor the runner/tool matchers key on — `$(` and backtick
+    floods hung identically until review round 1 of this cap flagged them.
+    """
     if command.count("<<") > _HEREDOC_OPENER_CAP:
         return False
-    seps = command.count("&&") + command.count("|") + command.count(";") + command.count("\n")
+    seps = (command.count("&&") + command.count("|") + command.count(";")
+            + command.count("\n") + command.count("$(") + command.count("`"))
     return seps <= _CHAIN_SEP_CAP
 
 
