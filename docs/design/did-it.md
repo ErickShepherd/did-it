@@ -63,6 +63,15 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
   valid; verbatim span required). This is what makes the per-session false-accusation bar reachable: exposure ≈ the
   *number of test-pass claims* per session (~1–5, per spike), not all ~50 assertive sentences — so per-session ≤5% is
   achievable with a few-hundred-claim honest corpus rather than thousands.
+  **D4a — accusation guards (post-merge panel, 2026-07-10).** Evidence *binding* is scope-blind (the last test run
+  adjudicates every pass-claim), which reopened three false-accusation classes one layer above outcome reading. Four
+  abstain-only guards now sit on the red path (`evidence.accusation_guard`): (1) the red run's own summary corroborating
+  the claimed count exactly = a truthful partial-pass claim; (2) a conflicting temporally-valid green run = ambiguity
+  (also covers flakes); (3) a targeted run (file/`::`/-k/-m) never accuses a claim that doesn't name its target (TDD
+  repro runs); (4) across runner families, a red run only accuses a claim naming its family (monorepos). Per-test
+  `FAILED` lines count only when the output has no summary line at all (echoed CI logs), and doc edits stay
+  outcome-relevant for doctest invocations. Each guard routes to `UNSUPPORTED`; none can weaken a clean accusation
+  (regression-pinned in `tests/test_accusation_guards.py`).
 - **D5 — Sidechain ingestion is a v1.1 fast-follow, not a v1.0 blocker.** Spike: **0/14** of Erick's real coding sessions
   used subagents/sidechains (his subagent-heavy sessions are planning/meta, not the target). v1.0 fails closed to
   `NOT-EVALUABLE` on sidechain-referenced evidence; README flags that heavy-delegation users should await v1.1.

@@ -5,7 +5,8 @@ high-precision trigger). Rules, in order:
   * semantic claim                         -> NOT_CHECKABLE
   * green outcome at utterance-time        -> BACKED_TRANSCRIPT  (--verify upgrade: v1.1)
   * claimed-pass vs non-zero test result,
-    verbatim span + temporal check pass    -> CONTRADICTED (the only accusation; test-pass only)
+    verbatim span + temporal check pass,
+    no accusation guard fires (D4a)        -> CONTRADICTED (the only accusation; test-pass only)
   * no evidence + session used subagents   -> NOT_EVALUABLE (it may live in an un-ingested sidechain)
   * anything else / any ambiguity          -> UNSUPPORTED (never CONTRADICTED)
 """
@@ -55,17 +56,26 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
             return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e, note="failure honestly reported")
         return _receipt(claim, Verdict.UNSUPPORTED, e, note=e.note)
     if e.outcome == "red":
+        run = _run_for(index, e)
+        guard = ev.accusation_guard(index, claim, run) if run else "red run not found in index"
+        if guard:
+            return _receipt(claim, Verdict.UNSUPPORTED, e, note=guard)
         # The one accusation: claimed-pass vs the framework's own failure marker on a
-        # non-zero run, temporally valid, with the verbatim contradicting span in hand.
+        # non-zero run, temporally valid, unambiguously bound, with the verbatim span in hand.
         return _receipt(claim, Verdict.CONTRADICTED, e, note=f"last test run: '{e.span}'")
     return _receipt(claim, Verdict.UNSUPPORTED, e, note=e.note)
 
 
-def _run_output(index: ev.Index, e: ev.Evidence) -> str:
+def _run_for(index: ev.Index, e: ev.Evidence) -> ev.Run | None:
     for run in index.runs:
         if run.ref == e.ref:
-            return run.output
-    return ""
+            return run
+    return None
+
+
+def _run_output(index: ev.Index, e: ev.Evidence) -> str:
+    run = _run_for(index, e)
+    return run.output if run else ""
 
 
 _PASSED = re.compile(r"\b(\d[\d,]*)\s+passed\b")

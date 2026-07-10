@@ -98,6 +98,16 @@ class TestTargetedRuns:
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "existing tests") == Verdict.UNSUPPORTED
 
+    def test_python_dash_m_module_flag_is_not_a_marker_selector(self, tmp_path):
+        # `.venv/bin/python -m pytest -q` — the interpreter's -m is not pytest's -m: this
+        # is a suite-level run and the fake counted claim must still be accused.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash(".venv/bin/python -m pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("All green — 12 tests passing.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests passing") == Verdict.CONTRADICTED
+
     def test_targeted_red_run_still_accuses_claim_naming_its_target(self, tmp_path):
         b = SessionBuilder()
         b.user_text("run the repro")
