@@ -59,6 +59,17 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
   making v1 vacuous (spike: ~5% informative-verdict rate). Letting an in-transcript green `tool_result` earn
   `BACKED-transcript` lifts the informative rate to a projected ~25–35% and covers the hero "tests pass" claim **with no
   `--verify` needed**. `--verify` becomes an *upgrade* to `BACKED-verified`, never the sole path to BACKED.
+  **D3a — the `--verify` execution trust boundary (shipped v1.1, owner decision 2026-07-10 "validated
+  verbatim").** `--verify <repo>` re-runs a green test-pass claim's *own* command to upgrade
+  `BACKED-transcript` → `BACKED-verified`. The command is untrusted transcript input, so it executes **only
+  if it is a single pure test-runner invocation** — rejected on any shell control, redirection, substitution,
+  or grouping character (chain/pipe/background, redirects, command/parameter substitution, subshells, braces,
+  backslash, newline) or a leading env-var prefix — run as argv with `shell=False` under a timeout (all
+  execution isolated in `verify.py`). It is **upgrade-only**: a red/flaky/errored/timed-out
+  re-run is never `CONTRADICTED` (the repo may have drifted since utterance-time), so it stays
+  `BACKED-transcript` with a note. Opt-in; never in the hot path / Stop hook. Flake guard: N runs (default 2),
+  upgrade only if *all* green. Rejected alternatives: re-running the verbatim string *unvalidated* (executes
+  untrusted shell); a canonical re-derived invocation (safe but verifies "a suite", not the claim).
 - **D4 — `CONTRADICTED` is a narrow, high-precision trigger** (claimed-pass vs a non-zero test `tool_result`, temporally
   valid; verbatim span required). This is what makes the per-session false-accusation bar reachable: exposure ≈ the
   *number of test-pass claims* per session (~1–5, per spike), not all ~50 assertive sentences — so per-session ≤5% is
@@ -132,9 +143,14 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
 - **v1.0:** deterministic extraction (+ process-narration filter) · transcript-only reconciliation · five verdicts w/
   two-tier BACKED (`BACKED-transcript`) · pinned schema + fail-closed `NOT-EVALUABLE` · synthetic corpus (dev/test split,
   cluster-bootstrap CIs) + small real anchor · mechanical leak-gate · MIT · **local-only until Erick's explicit push notice.**
-- **v1.1 fast-follows:** `--verify` → `BACKED-verified` (with flake/n-rerun/`TEMPORALLY-UNVERIFIABLE` handling) · subagent-
-  sidechain ingestion · adversarial fake-pass hardening.
-  - **Shipped:** *jest/npm/go failure-summary literacy* — outcome-reading now recognizes the jest/vitest/npm
+- **v1.1 fast-follows:** subagent-sidechain ingestion · adversarial fake-pass hardening.
+  - **Shipped:** *`--verify` → `BACKED-verified`* — validated-verbatim re-execution (D3a): a green
+    transcript-backed test-pass whose command is a pure test-runner invocation is re-run in `--verify <repo>`
+    (argv, `shell=False`, timeout, N=2 flake guard) and upgraded to `BACKED-verified` if all green; anything
+    else stays `BACKED-transcript` (upgrade-only, never an accusation). Execution isolated in `verify.py`;
+    opt-in, never in the hot path. (A failed/flaky re-run is annotated rather than given a distinct
+    `TEMPORALLY-UNVERIFIABLE` verdict — the verdict vocabulary stays fixed.)
+  - **Shipped:** *jest/npm/go failure-summary literacy* — outcome-reading now recognizes the jest/npm
     summary (counts + an `N total` clause; duration on a separate `Time:` line) and go's package-result line
     (`ok|FAIL <pkg> <t>s`), alongside pytest and cargo. Same discipline as v1: read only off a framework-authored
     summary line, per-line, and accuse only on a non-zero exit — a bare `FAIL` word or an echoed log never accuses
