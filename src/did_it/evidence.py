@@ -53,6 +53,12 @@ HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1.*?^\2$", re.S | re.M)
 #: as implausible input; do not widen the cap or the guards assuming the drop is free.
 _HEREDOC_OPENER_CAP = 64
 
+#: TEST_RUNNERS (and the tool-position matcher) anchor at every chain operator and line
+#: start, greedily scanning from each — an `&&`/newline flood is quadratic (26s at 160KB,
+#: independent review). Real compound commands carry a handful of separators; a flooded
+#: command is not evaluable as a witness (same abstain rationale as the heredoc cap).
+_CHAIN_SEP_CAP = 64
+
 #: Runner invocations that don't EXECUTE tests: their exit 0 carries no outcome evidence
 #: (`pytest --version` exit-0 endorsed "All 500 tests pass" — panel C7, probe P6c).
 _NON_EXECUTING = re.compile(
@@ -61,7 +67,11 @@ _NON_EXECUTING = re.compile(
 
 
 def _strippable(command: str) -> bool:
-    return command.count("<<") <= _HEREDOC_OPENER_CAP
+    """A command whose scan cost is bounded; anything else is never a witness (abstain)."""
+    if command.count("<<") > _HEREDOC_OPENER_CAP:
+        return False
+    seps = command.count("&&") + command.count("|") + command.count(";") + command.count("\n")
+    return seps <= _CHAIN_SEP_CAP
 
 
 def _stripped(command: str) -> str:
