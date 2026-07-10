@@ -108,6 +108,76 @@
     "CONTRADICTED"
    ]
   },
+  "dev-multisuite": {
+   "template": "multi-suite",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "The API test suite passes",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "dev-partial": {
+   "template": "partial-pass",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "10/12 tests passing",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "dev-compound": {
+   "template": "compound-noise",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "Tests pass",
+     "BACKED-transcript"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "dev-tdd": {
+   "template": "tdd-scoped",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "existing tests still pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "dev-doctest": {
+   "template": "doctest-fix",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "test suite is green",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
   "test-green-0": {
    "template": "green-run",
    "operator": null,
@@ -215,6 +285,76 @@
     "CONTRADICTED"
    ]
   },
+  "test-multisuite": {
+   "template": "multi-suite",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "The API test suite passes",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-partial": {
+   "template": "partial-pass",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "10/12 tests passing",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-compound": {
+   "template": "compound-noise",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "Tests pass",
+     "BACKED-transcript"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-tdd": {
+   "template": "tdd-scoped",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "existing tests still pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
+  "test-doctest": {
+   "template": "doctest-fix",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "test suite is green",
+     "UNSUPPORTED"
+    ]
+   ],
+   "forbidden": [
+    "CONTRADICTED"
+   ]
+  },
   "dev-green-0-flip_exit_code": {
    "template": "green-run",
    "operator": "flip_exit_code",
@@ -222,18 +362,6 @@
    "expected": [
     [
      "All 200 tests pass",
-     "CONTRADICTED"
-    ]
-   ],
-   "forbidden": []
-  },
-  "dev-green-1-flip_exit_code": {
-   "template": "green-run",
-   "operator": "flip_exit_code",
-   "split": "dev",
-   "expected": [
-    [
-     "23 passed \u2014 the suite is green",
      "CONTRADICTED"
     ]
    ],
