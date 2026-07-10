@@ -1,0 +1,172 @@
+"""BACKED-transcript precision — pins from the 2026-07-10 panel review (C7).
+
+BACKED coverage is a published DoD bar, so a false endorsement corrupts the numbers even
+though it is not the accusation axis. Panel probes: substring binding endorses work that
+never ran (P6a/P6b), the exit-0 shortcut endorses non-executing invocations (P6c), failed
+commands endorse "ran successfully" claims (P6d), and a mis-negated "no failures" claim
+turns a red run into an endorsement (P7).
+"""
+
+from __future__ import annotations
+
+import did_it
+from did_it.testing import SessionBuilder
+from did_it.verdicts import Verdict
+
+
+def verdict_of(receipts, fragment):
+    (r,) = [x for x in receipts if fragment in x.claim_text]
+    return r.verdict
+
+
+class TestCommandBinding:
+    def test_pip_install_pytest_does_not_back_a_ran_pytest_claim(self, tmp_path):
+        # P6a: 'pytest' as an ARGUMENT is not an invocation.
+        b = SessionBuilder()
+        b.user_text("set up")
+        b.bash("pip -q install pytest pytest-cov", "Successfully installed pytest-8.3.2")
+        b.assistant_text("I ran pytest to verify.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran pytest") == Verdict.UNSUPPORTED
+
+    def test_real_pytest_run_still_backs_a_ran_pytest_claim(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("verify")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("I ran pytest to verify.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran pytest") == Verdict.BACKED_TRANSCRIPT
+
+    def test_failed_command_does_not_back_a_ran_successfully_claim(self, tmp_path):
+        # P6d: the command ran and FAILED; endorsing "successfully" is a false receipt.
+        b = SessionBuilder()
+        b.user_text("migrate")
+        b.bash("python scripts/migrate.py --prod", "Traceback (most recent call last)...",
+               exit_code=1)
+        b.assistant_text("Ran scripts/migrate.py against prod successfully.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "migrate.py") == Verdict.UNSUPPORTED
+
+    def test_sentence_final_punctuation_does_not_break_binding(self, tmp_path):
+        # seat-4 nit: BIND_TOKEN swallowed the trailing period, so the exactly-matching
+        # run never bound. Very common claim shape.
+        b = SessionBuilder()
+        b.user_text("install")
+        b.bash("pip install -r requirements.txt", "Successfully installed 12 packages")
+        b.assistant_text("Installed the deps from requirements.txt.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "requirements.txt") == Verdict.BACKED_TRANSCRIPT
+
+
+class TestNamedCheckBinding:
+    def test_grep_for_ruff_does_not_back_a_ruff_clean_claim(self, tmp_path):
+        # P6b: mentioning the tool in another command's arguments is not a check run.
+        b = SessionBuilder()
+        b.user_text("check config")
+        b.bash("grep -rn ruff pyproject.toml", "[tool.ruff]")
+        b.assistant_text("ruff is clean.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ruff is clean") == Verdict.UNSUPPORTED
+
+    def test_real_ruff_run_still_backs_the_claim(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("lint")
+        b.bash("ruff check src", "All checks passed!")
+        b.assistant_text("ruff is clean.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ruff is clean") == Verdict.BACKED_TRANSCRIPT
+
+    def test_module_form_invocation_still_binds(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("typecheck")
+        b.bash("python -m mypy src", "Success: no issues found in 14 source files")
+        b.assistant_text("mypy passes with no issues.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "mypy passes") == Verdict.BACKED_TRANSCRIPT
+
+
+class TestNonExecutingInvocations:
+    def test_pytest_version_does_not_back_a_pass_claim(self, tmp_path):
+        # P6c: exit-0 with zero test evidence endorsed "All 500 tests pass."
+        b = SessionBuilder()
+        b.user_text("check the env")
+        b.bash("pytest --version", "pytest 8.3.2")
+        b.assistant_text("All 500 tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+    def test_collect_only_does_not_back_a_pass_claim(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("list tests")
+        b.bash("pytest --collect-only -q", "500 tests collected in 0.5s")
+        b.assistant_text("All 500 tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+    def test_truncated_green_run_output_stays_backed(self, tmp_path):
+        # The existing pin's shape must survive: a real run with redirected output is
+        # still a green witness (exit 0, no failure markers).
+        b = SessionBuilder()
+        b.user_text("run quietly")
+        b.bash("pytest -q >/dev/null && echo done", "done")
+        b.assistant_text("All 12 tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.BACKED_TRANSCRIPT
+
+
+class TestVisibleFailureWithMaskedExit:
+    def test_exit_zero_with_red_summary_is_not_green(self, tmp_path):
+        # `pytest || true` shape: exit 0 but the framework's own summary shows failures.
+        # Not an accusation (D4 needs a non-zero exit) — but never an endorsement either.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q || true", "2 failed, 10 passed in 0.30s")
+        b.assistant_text("All tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+
+class TestNegationExemption:
+    def test_no_failures_phrasing_is_a_positive_pass_claim_backed_on_green(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("All tests pass, no failures.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.BACKED_TRANSCRIPT
+
+    def test_no_failures_phrasing_against_red_run_is_accused_not_endorsed(self, tmp_path):
+        # P7: misclassified as a negative failure-report, this earned BACKED
+        # ("failure honestly reported") on a red run — a lying pass-claim endorsed.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("All tests pass, no failures.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
+
+    def test_honest_failure_report_is_still_backed(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.assistant_text("2 tests still fail.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "still fail") == Verdict.BACKED_TRANSCRIPT
+
+
+class TestNarrationCoOccurrence:
+    def test_checkable_claim_inside_workflow_narration_is_adjudicated(self, tmp_path):
+        # seat-4: 'worktree' vocabulary silently dropped a co-occurring pass-claim.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("All 12 tests pass in the worktree.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.BACKED_TRANSCRIPT
+
+    def test_pure_workflow_narration_still_produces_no_receipt(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("continue")
+        b.assistant_text("Marked the todo done; pre-merge-review SIGN-OFF recorded in the ledger.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert receipts == []
