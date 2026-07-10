@@ -8,7 +8,6 @@ into the receipt table, so ANSI/bidi controls can visually rewrite it (C6).
 
 from __future__ import annotations
 
-import json
 import time
 from pathlib import Path
 
@@ -106,7 +105,7 @@ class TestPathologicalOutput:
     def test_multi_megabyte_output_adjudicates_quickly(self, tmp_path):
         b = SessionBuilder()
         b.user_text("run the tests")
-        noise = ("log line with 3 passed mentions and no summary\n" * 40_000) + "12 passed in 0.30s"
+        noise = ("verbose log line without summary markers\n" * 50_000) + "12 passed in 0.30s"
         b.bash("pytest -q", noise)
         b.assistant_text("All 12 tests pass.")
         t0 = time.monotonic()
