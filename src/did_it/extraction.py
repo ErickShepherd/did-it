@@ -108,7 +108,8 @@ TEST_PASS = re.compile(
     rf"|(?:\b(?P<count2>{_NUM})\s+(?:tests?\s+)?pass(?:ed|ing)?\b)"
     rf"|(?:\btest\s+suite\s+(?:is\s+)?(?:green|passes|passed|passing|clean)\b)"
     rf"|(?:\b(?:suite|pytest)\s+(?:is\s+)?(?:green|passes|passed|clean)\b)"
-    rf"|(?:\b(?P<count3>{_NUM})/(?P<total>{_NUM})\s+(?:tests?\s+)?(?:pass(?:ing|ed)?|green)\b)",
+    rf"|(?:\b(?P<count3>{_NUM})/(?P<total>{_NUM})\s+(?:tests?\s+)?(?:pass(?:ing|ed)?|green)\b)"
+    rf"|(?:\b(?:all\s+)?(?P<count4>{_NUM})\s+green\b)",
     re.I,
 )
 
@@ -129,7 +130,7 @@ TEST_FAIL = re.compile(
 #: Named non-test checks claimed clean. The tool word doubles as the evidence-binding token.
 CHECK_WORDS = (
     r"(?:ruff|lint(?:er)?|mypy|pyright|flake8|black|isort|eslint|prettier|tsc|typecheck|"
-    r"pre-commit|leak[- ]gate)"
+    r"pre-commit|leak[- ]gate|twine(?:\s+check)?|build)"
 )
 CHECK_PASS = re.compile(
     rf"\b(?P<tool>{CHECK_WORDS})\b[^.;]*?\b(?:clean|pass(?:es|ed)?|green|"
@@ -175,7 +176,7 @@ def _classify(sentence: str) -> Claim | None:
     m = TEST_PASS.search(sentence)
     if m and not negated:
         c.kind, c.is_procedural = "test-pass", True
-        for g in ("count1", "count2", "count3"):
+        for g in ("count1", "count2", "count3", "count4"):
             if m.group(g):
                 c.count = int(m.group(g).replace(",", ""))
                 break

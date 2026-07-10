@@ -108,3 +108,23 @@ class TestAssertivenessGate:
         b.assistant_text("Now re-verify: tests pass, defaults are OFF.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert all(r.verdict != Verdict.CONTRADICTED for r in receipts)
+
+
+class TestExtractionPatterns:
+    def test_bare_count_green_is_a_test_pass_claim(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "45 passed in 0.30s")
+        b.assistant_text("All 45 green.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        (r,) = receipts
+        assert r.verdict == Verdict.BACKED_TRANSCRIPT
+
+    def test_twine_check_passed_is_a_check_pass_claim(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check the dist")
+        b.bash("twine check dist/*", "Checking dist/x-1.0-py3-none-any.whl: PASSED")
+        b.assistant_text("twine check passed on all four dists.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        (r,) = receipts
+        assert r.verdict == Verdict.BACKED_TRANSCRIPT
