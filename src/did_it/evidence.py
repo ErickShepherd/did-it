@@ -104,9 +104,11 @@ def is_test_command(command: str) -> bool:
 _SUMMARY_COUNTS = re.compile(r"\b\d[\d,]*\s+(?:passed|failed|errors?|skipped)\b")
 _SUMMARY_TIME = re.compile(r"\bin\s+[\d.]+s\b")
 _SUMMARY_CARGO = re.compile(r"\btest result: (?:ok|FAILED)\b")
-#: jest/vitest/npm literacy (v1.1): their summary carries the counts and an "N total"
-#: clause, but the duration is on a SEPARATE `Time:` line, so pytest's `in N.NNs` gate never
-#: matched them. "N total" is the framework-authored anchor that distinguishes the summary
+#: jest/npm literacy (v1.1): the jest summary carries the counts and an "N total" clause,
+#: but the duration is on a SEPARATE `Time:` line, so pytest's `in N.NNs` gate never
+#: matched it. (vitest's native `Tests 12 passed (12)` has no `N total` and stays unread →
+#: UNSUPPORTED, the safe direction — not claimed as covered.)
+#: "N total" is the framework-authored anchor that distinguishes the summary
 #: line from an incidental "1 failed" in prose. The trailing `(?!\s+\w)` keeps it to jest's
 #: end-of-clause `N total` and off prose like "100 total records" (shrinks the incidental
 #: accusation surface — round-1 review). Still per-line, still exit-gated for accusal.

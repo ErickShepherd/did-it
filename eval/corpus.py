@@ -79,11 +79,12 @@ def red_output(runner: str, failed: int, passed: int) -> str:
 
 
 #: Runners whose FAILURE summaries the detector can read. v1.1 closed the v1 jest/npm/go
-#: blindness (jest/vitest "N total" line; go "ok|FAIL <pkg> <t>s" package line), so every
+#: blindness (jest/npm "N total" line; go "ok|FAIL <pkg> <t>s" package line), so every
 #: runner in the corpus is now summary-literate — the whitelist stays explicit so a future
-#: unread runner (e.g. mocha) is excluded rather than silently mislabeled.
+#: unread runner (e.g. mocha, or vitest's `passed (N)` shape) is excluded rather than
+#: silently mislabeled.
 _LITERATE = ("pytest", ".venv/bin/python", "python", "cargo", "go test",
-             "npm", "yarn", "pnpm", "bun", "jest", "vitest")
+             "npm", "yarn", "pnpm", "bun", "jest")
 
 
 def summary_literate(runner: str | None) -> bool:
@@ -95,7 +96,7 @@ def summary_literate(runner: str | None) -> bool:
 #: literacy. go's package line (`ok <pkg> <t>s`) reports no count, so miscount is unsatisfiable
 #: there (the claim just stays BACKED): exclude it, or the fixture is mislabeled by construction.
 _COUNT_LITERATE = ("pytest", ".venv/bin/python", "python", "cargo",
-                   "npm", "yarn", "pnpm", "bun", "jest", "vitest")
+                   "npm", "yarn", "pnpm", "bun", "jest")
 
 
 def count_literate(runner: str | None) -> bool:

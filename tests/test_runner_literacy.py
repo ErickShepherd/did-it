@@ -25,7 +25,8 @@ def verdict_of(receipts, fragment):
     return r.verdict
 
 
-# jest native summaries (npm test / jest / vitest share the "N total" shape)
+# jest native summaries (npm test / jest share the "N total" shape; vitest's `passed (N)`
+# has no `total` and is intentionally not covered — it stays unread, never falsely accused)
 JEST_RED = "Tests:       1 failed, 11 passed, 12 total\nRan all test suites."
 JEST_GREEN = "Tests:       12 passed, 12 total\nTime:        1.21 s\nRan all test suites."
 # go native package-result lines (tab-separated in real output)
