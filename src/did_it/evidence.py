@@ -66,16 +66,12 @@ _FAILED_COUNT = re.compile(r"\b[1-9]\d*\s+(?:failed|errors?)\b|\btest result: FA
 _PASSED_COUNT = re.compile(r"\b\d[\d,]*\s+passed\b|\btest result: ok\b")
 #: pytest short-summary per-test lines are framework-authored and unambiguous on their own.
 FAILED_LINE = re.compile(r"^(?:FAILED|ERROR)\s+\S+::", re.M)
-#: Outcome scanning is bounded: only the output TAIL is read (summaries end a run — and
-#: truncating from the front can only lose evidence in the abstain direction), and lines
-#: far beyond any real framework summary's length are skipped.
-_OUTPUT_SCAN_CAP = 262_144
-_SUMMARY_LINE_CAP = 1_000
 
 
 def _is_summary_line(line: str) -> bool:
-    if len(line) > _SUMMARY_LINE_CAP:
-        return False
+    # No length cap and no output truncation: every component search is linear, and any
+    # bound that can drop a genuine green summary re-opens the C2 false accusation
+    # (review round 2 demonstrated exactly that with a 256KB tail cap).
     return bool(
         (_SUMMARY_COUNTS.search(line) and _SUMMARY_TIME.search(line))
         or _SUMMARY_CARGO.search(line)
@@ -93,12 +89,8 @@ class Run:
     ref: str                       # tool_use id
     is_test_run: bool
 
-    @property
-    def _scan_tail(self) -> str:
-        return self.output[-_OUTPUT_SCAN_CAP:]
-
     def _summary_lines(self) -> list[str]:
-        return [line for line in self._scan_tail.splitlines() if _is_summary_line(line)]
+        return [line for line in self.output.splitlines() if _is_summary_line(line)]
 
     @property
     def framework_failed(self) -> bool:
@@ -111,7 +103,7 @@ class Run:
         lines = self._summary_lines()
         if lines:
             return any(_FAILED_COUNT.search(line) for line in lines)
-        return bool(FAILED_LINE.search(self._scan_tail))
+        return bool(FAILED_LINE.search(self.output))
 
     @property
     def framework_green(self) -> bool:
@@ -138,7 +130,7 @@ class Run:
             None,
         )
         if fail_span is None:
-            m = FAILED_LINE.search(self._scan_tail)
+            m = FAILED_LINE.search(self.output)
             fail_span = m.group(0).strip() if m else "framework failure"
         return f"{exit_m.group(0) if exit_m else f'exit {self.exit_code}'}; {fail_span}"
 

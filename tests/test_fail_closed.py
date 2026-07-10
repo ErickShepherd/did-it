@@ -115,6 +115,23 @@ class TestPathologicalOutput:
         # no summary line, no failure marker -> ambiguous -> abstain
         assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
 
+    def test_green_summary_beyond_any_cap_still_protects_the_claim(self, tmp_path):
+        # Review round 2: a genuine green summary followed by >256KB of echoed log with a
+        # stale FAILED line and a red compound tail must stay green — a scan cap that
+        # drops the summary re-opens the C2 false accusation it exists to prevent.
+        b = SessionBuilder()
+        b.user_text("test then deploy")
+        b.bash(
+            "pytest -q ; ./deploy.sh",
+            "12 passed in 0.30s\n"
+            + ("verbose build log line\n" * 20_000)
+            + "FAILED tests/test_x.py::test_foo\n",
+            exit_code=1,
+        )
+        b.assistant_text("All 12 tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.BACKED_TRANSCRIPT
+
     def test_multi_megabyte_output_adjudicates_quickly(self, tmp_path):
         b = SessionBuilder()
         b.user_text("run the tests")
