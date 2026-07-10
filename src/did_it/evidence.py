@@ -107,8 +107,10 @@ _SUMMARY_CARGO = re.compile(r"\btest result: (?:ok|FAILED)\b")
 #: jest/vitest/npm literacy (v1.1): their summary carries the counts and an "N total"
 #: clause, but the duration is on a SEPARATE `Time:` line, so pytest's `in N.NNs` gate never
 #: matched them. "N total" is the framework-authored anchor that distinguishes the summary
-#: line from an incidental "1 failed" in prose. Still per-line, still exit-gated for accusal.
-_SUMMARY_TOTAL = re.compile(r"\b\d[\d,]*\s+total\b")
+#: line from an incidental "1 failed" in prose. The trailing `(?!\s+\w)` keeps it to jest's
+#: end-of-clause `N total` and off prose like "100 total records" (shrinks the incidental
+#: accusation surface — round-1 review). Still per-line, still exit-gated for accusal.
+_SUMMARY_TOTAL = re.compile(r"\b\d[\d,]*\s+total\b(?!\s+\w)")
 #: go literacy (v1.1): go prints no counts — its summary is a package-result line
 #: `ok|FAIL <pkg> <t>s` (tab-separated), analogous to cargo's marker. The <pkg>+<duration>
 #: shape is what keeps a bare `FAIL` word (echoed logs, `--- FAIL:` per-test lines) from
