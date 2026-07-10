@@ -307,11 +307,17 @@ _FAMILIES: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("ruby", re.compile(r"\brspec\b|\bruby\b", re.I)),
     ("jvm", re.compile(r"\b(?:mvn|maven|gradlew?|java)\b", re.I)),
 )
+_FAMILY_PATTERNS = dict(_FAMILIES)
 
 #: File / selector arguments that make a run TARGETED (a repro or subset run): a source
 #: file, a `::` node id, or a -k/-m expression. Directory scopes stay suite-level.
-_TARGET_FILE = re.compile(r"(\S+\.(?:py|rs|go|ts|tsx|js|jsx|rb|java|cc?|cpp))\b(?:::(\S+))?")
-_TARGET_SELECT = re.compile(r"\s-(?:k|m)[= ]+(['\"]?)([\w~<>=. -]+)\1")
+#: The command is untrusted transcript content, so the scan must stay linear (independent
+#: review of this branch measured 26s at 160KB with a free `\S+\.` scan): file targets are
+#: matched per whitespace token (anchored, length-gated), selectors on a capped prefix.
+_TARGET_FILE_TOKEN = re.compile(r"(\S{1,500}\.(?:py|rs|go|ts|tsx|js|jsx|rb|java|cc?|cpp))(?:::(\S{1,500}))?$")
+_TARGET_SELECT = re.compile(r"\s-(?:k|m)[= ]{1,8}(['\"]?)([\w~<>=. -]{1,256})\1")
+_SELECT_SCAN_CAP = 4096
+_TOKEN_LENGTH_CAP = 512
 
 
 def summary_passed_count(run: Run) -> int | None:
@@ -343,19 +349,28 @@ def target_tokens(command: str) -> set[str]:
 
     Only the runner's OWN arguments are scanned (text after the runner match): the
     interpreter's `-m` in `python -m pytest` is not pytest's marker flag, and paths in
-    neighbouring sub-commands are not test scopes.
+    neighbouring sub-commands are not test scopes. Heredoc bodies are stripped first,
+    as in is_test_command — quoted file names in them are not scopes either.
     """
-    clause = _runner_clause(command)
+    clause = _runner_clause(HEREDOC.sub(" ", command))
     m = TEST_RUNNERS.search(clause)
     args = clause[m.end():] if m else clause
     out: set[str] = set()
-    for sel in _TARGET_SELECT.finditer(args):
+    for sel in _TARGET_SELECT.finditer(args[:_SELECT_SCAN_CAP]):
         out.update(w for w in re.findall(r"\w+", sel.group(2)) if len(w) >= 3)
-    args = QUOTED.sub(" ", args)
-    for f in _TARGET_FILE.finditer(args):
-        out.add(f.group(1).rsplit("/", 1)[-1])
-        if f.group(2):
-            out.add(f.group(2))
+    tail = args[_SELECT_SCAN_CAP:]
+    if " -k" in tail or " -m" in tail:
+        # A selector beyond the scan cap: mark the run targeted with a token no claim can
+        # name, so the guard abstains — never the accusing direction on unscanned input.
+        out.add("\x00selector-beyond-scan-cap")
+    for tok in QUOTED.sub(" ", args).split():
+        if len(tok) > _TOKEN_LENGTH_CAP:
+            continue
+        f = _TARGET_FILE_TOKEN.match(tok)
+        if f:
+            out.add(f.group(1).rsplit("/", 1)[-1])
+            if f.group(2):
+                out.add(f.group(2))
     return out
 
 
@@ -397,6 +412,3 @@ def accusation_guard(index: Index, claim, run: Run) -> str | None:  # noqa: ANN0
     if len(families) > 1 and (fam is None or not _FAMILY_PATTERNS[fam].search(claim.text)):
         return "multiple test-runner families ran; the claim does not name this run's"
     return None
-
-
-_FAMILY_PATTERNS = dict(_FAMILIES)

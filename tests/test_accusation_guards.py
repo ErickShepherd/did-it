@@ -129,6 +129,34 @@ class TestFlakyConflict:
         assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
 
 
+class TestPathologicalCommands:
+    def test_huge_dotless_command_blob_adjudicates_quickly(self, tmp_path):
+        # The command string is untrusted transcript content: target extraction must stay
+        # near-linear (independent review measured 26s at 160KB with unbounded quantifiers).
+        import time
+
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        blob = "x" * 200_000
+        b.bash(f"pytest -q # {blob}", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("All tests pass.")
+        t0 = time.monotonic()
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert time.monotonic() - t0 < 2.0
+        assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
+
+    def test_huge_selector_expression_adjudicates_quickly(self, tmp_path):
+        import time
+
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -k " + "=" * 100_000, "1 failed in 0.30s", exit_code=1)
+        b.assistant_text("All tests pass.")
+        t0 = time.monotonic()
+        did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert time.monotonic() - t0 < 2.0
+
+
 # --- C2: FAILED/ERROR per-test lines vs the summary line -------------------------------
 
 

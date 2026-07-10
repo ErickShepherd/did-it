@@ -13,8 +13,6 @@ high-precision trigger). Rules, in order:
 
 from __future__ import annotations
 
-import re
-
 from . import evidence as ev
 from .verdicts import Receipt, Verdict
 
@@ -78,11 +76,10 @@ def _run_output(index: ev.Index, e: ev.Evidence) -> str:
     return run.output if run else ""
 
 
-_PASSED = re.compile(r"\b(\d[\d,]*)\s+passed\b")
-
-
 def _passed_count(output: str) -> int | None:
-    m = _PASSED.search(output)
+    # Whole-output read (v1.1 backlog: restrict to the summary line, as
+    # evidence.summary_passed_count already does on the accusation path).
+    m = ev._PASSED_N.search(output)
     return int(m.group(1).replace(",", "")) if m else None
 
 
