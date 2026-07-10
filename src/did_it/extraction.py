@@ -67,7 +67,7 @@ HEDGES = re.compile(
     r"\b(?:should|would|could|may|might|will|shall|won't|ought to|going to|gonna|"
     r"expect(?:s|ed)?|hop(?:e|es|ing)|likely|probably|presumably|potentially|"
     r"once|unless|assuming|hopefully|intend(?:s|ed)? to|plan(?:s|ned)? to|"
-    r"aim(?:s|ed)? to|try(?:ing)? to|attempt(?:s|ed)? to)\b"
+    r"aim(?:s|ed)? to|try(?:ing)? to|attempt(?:s|ed)? to|let(?:'s| me| us))\b"
     r"|'ll\b",
     re.I,
 )
@@ -145,9 +145,11 @@ EXIT_CODE = re.compile(
     re.I,
 )
 
+#: Past forms only: base-form "write X" / "add X" is future intent, not an accomplished fact.
 FILE_CREATED = re.compile(
-    r"\b(?:creat|add|wrot|writ|generat)(?:e|ed|es|ten|ing)\b[^.;]*?"
+    r"\b(?:created|added|wrote|written|generated|saved)\b[^.;]*?"
     r"(?P<path>[\w./-]+\.[A-Za-z]{1,8})",
+    re.I,
 )
 
 COMMAND_RAN = re.compile(

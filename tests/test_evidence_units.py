@@ -128,3 +128,32 @@ class TestExtractionPatterns:
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         (r,) = receipts
         assert r.verdict == Verdict.BACKED_TRANSCRIPT
+
+
+class TestIntentPhrases:
+    def test_let_me_phrase_is_not_gated(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("continue")
+        b.bash("pytest -q", "3 passed in 0.1s")
+        b.assistant_text(
+            "Since this is the last item, let me run a full branch verification "
+            "(pytest + ruff + build + twine) to confirm the branch is clean and mergeable."
+        )
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert receipts == []
+
+    def test_base_form_write_is_future_intent_not_file_created(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("continue")
+        b.assistant_text("Next item — write docs/release-checklist.md for the owner-gated tail.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert receipts == []
+
+    def test_past_tense_wrote_is_still_a_file_created_claim(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("continue")
+        b.write_file("/work/toy-repo/docs/notes.md")
+        b.assistant_text("Wrote docs/notes.md with the release steps.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        (r,) = receipts
+        assert r.verdict == Verdict.BACKED_TRANSCRIPT
