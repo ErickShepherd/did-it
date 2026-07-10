@@ -147,6 +147,21 @@ class TestPathologicalOutput:
 # --- C6: receipt rendering must neutralize terminal-control content --------------------
 
 
+class TestPathologicalCommands:
+    def test_heredoc_opener_flood_adjudicates_quickly_and_abstains(self, tmp_path):
+        # The HEREDOC-stripping regex is quadratic on unterminated openers (review round 3:
+        # 15.5s at 160KB). An un-strippable command is not evaluable as a witness at all —
+        # no run, no accusation, pure abstention.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest " + "<<X " * 40_000, "1 failed in 0.30s", exit_code=1)
+        b.assistant_text("All tests pass.")
+        t0 = time.monotonic()
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert time.monotonic() - t0 < 2.0
+        assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+
 class TestRenderSanitization:
     def test_ansi_and_bidi_controls_are_stripped(self):
         r = Receipt(

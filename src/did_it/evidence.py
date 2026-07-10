@@ -42,8 +42,23 @@ QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"")
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1.*?^\2$", re.S | re.M)
 
 
+#: HEREDOC's lazy body scan is quadratic on unterminated `<<X` floods (review round 3:
+#: 15.5s at 160KB) — each opener scans to end-of-string. Capping the OPENER COUNT bounds
+#: the total work to ~cap×len (a plain long command with few `<<` strips linearly). An
+#: opener-flooded command is treated as NOT a test command — it can then never be a
+#: witness for OR against any claim (pure abstention; skipping the strip instead could
+#: mint a phantom red run, i.e. an accusation).
+_HEREDOC_OPENER_CAP = 64
+
+
+def _strippable(command: str) -> bool:
+    return command.count("<<") <= _HEREDOC_OPENER_CAP
+
+
 def is_test_command(command: str) -> bool:
     """True if the Bash command actually invokes a test runner (not merely mentions one)."""
+    if not _strippable(command):
+        return False
     stripped = HEREDOC.sub(" ", command)
     stripped = QUOTED.sub(" ", stripped)
     return bool(TEST_RUNNERS.search(stripped))
