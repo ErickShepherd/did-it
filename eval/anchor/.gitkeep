@@ -1,0 +1,2 @@
+# The private, execution-labeled real evaluation anchor lives here.
+# Contents are gitignored and NEVER committed (design doc D8). Only aggregate metrics are published.

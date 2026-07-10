@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Private real evaluation anchor — NEVER commit (design doc D8: privacy).
+# Real Claude Code transcripts carry private paths/PII; only aggregate metrics are published.
+eval/anchor/*
+!eval/anchor/.gitkeep
+*.real.jsonl
+
+# Local scratch
+tmp/

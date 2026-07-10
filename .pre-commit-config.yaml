@@ -1,0 +1,10 @@
+# Privacy leak-gate runs on every commit (design doc D8). Local hook, no network deps.
+repos:
+  - repo: local
+    hooks:
+      - id: leak-gate
+        name: privacy leak-gate (no real transcript content in fixtures)
+        entry: python3 scripts/leak_gate.py
+        language: system
+        files: ^fixtures/
+        pass_filenames: true
