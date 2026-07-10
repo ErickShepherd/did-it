@@ -134,4 +134,11 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
   cluster-bootstrap CIs) + small real anchor · mechanical leak-gate · MIT · **local-only until Erick's explicit push notice.**
 - **v1.1 fast-follows:** `--verify` → `BACKED-verified` (with flake/n-rerun/`TEMPORALLY-UNVERIFIABLE` handling) · subagent-
   sidechain ingestion · adversarial fake-pass hardening.
+  - **Shipped:** *jest/npm/go failure-summary literacy* — outcome-reading now recognizes the jest/vitest/npm
+    summary (counts + an `N total` clause; duration on a separate `Time:` line) and go's package-result line
+    (`ok|FAIL <pkg> <t>s`), alongside pytest and cargo. Same discipline as v1: read only off a framework-authored
+    summary line, per-line, and accuse only on a non-zero exit — a bare `FAIL` word or an echoed log never accuses
+    (anchor re-checked: 0 CONTRADICTED / 400 real sessions). Flip mutants for these runners are now generated and
+    measured (previously excluded), so the catch-rate can regress-fail. Genuinely-unread runners (e.g. mocha) stay
+    excluded rather than mislabeled.
 - **Deferred (v2+):** the de-fanged one-shot "State of Agent Honesty" report (never a live curated leaderboard).
