@@ -52,9 +52,9 @@ def applicable(operator: str, item) -> bool:  # noqa: ANN001  (CorpusItem; avoid
     if item.template not in _APPLIES_TO[operator]:
         return False
     if operator == "flip_exit_code":
-        # A flip on a summary-illiterate runner (jest/npm) is uncatchable BY DESIGN in v1
-        # (published limitation): including it would fake the catch rate in either
-        # direction, so it is excluded rather than silently mislabeled (panel C8).
+        # A flip is only catchable if the detector can read the runner's FAILURE summary.
+        # v1.1 closed the jest/npm/go blindness, so every corpus runner now qualifies; the
+        # gate stays so a future unread runner is excluded rather than silently mislabeled.
         from . import corpus
 
         return corpus.summary_literate(getattr(item, "runner", None))

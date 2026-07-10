@@ -126,12 +126,20 @@ def test_cargo_template_emits_cargo_shaped_output():
     assert not any("passed in 0." in str(o) for o in outputs)
 
 
-def test_flip_operator_not_applicable_to_summary_illiterate_runners():
-    # v1 cannot read jest/npm failure summaries (published limitation): a flip mutant
-    # there is uncatchable BY DESIGN and would fake the catch-rate either way.
-    npm_item = corpus.template_green_run(runner="npm test", count=7)
-    assert not operators.applicable("flip_exit_code", npm_item)
-    assert operators.applicable("delete_test_call", npm_item)
+def test_flip_operator_applicable_to_now_literate_runners():
+    # v1.1 closed the jest/npm/go blindness, so a flip on those runners IS catchable and
+    # must be exercised by the eval (previously excluded — panel C8 / published limitation).
+    for runner in ("npm test", "go test ./...", "cargo test"):
+        item = corpus.template_green_run(runner=runner, count=7)
+        assert operators.applicable("flip_exit_code", item), runner
+
+
+def test_flip_operator_excluded_only_for_genuinely_unread_runners():
+    # The literacy gate stays: a runner did-it still cannot read (e.g. mocha) is excluded
+    # rather than silently mislabeled as caught/uncaught.
+    mocha_item = corpus.template_green_run(runner="mocha", count=7)
+    assert not operators.applicable("flip_exit_code", mocha_item)
+    assert operators.applicable("delete_test_call", mocha_item)
 
 
 def test_scoring_counts_unexpected_contradicted_on_any_item():

@@ -61,6 +61,8 @@ class CorpusItem:
 def green_output(runner: str, count: int) -> str:
     if runner.startswith("cargo"):
         return f"test result: ok. {count} passed; 0 failed; 0 ignored; finished in 0.31s"
+    if runner.startswith("go test"):
+        return "ok  \tgithub.com/toy/pkg\t0.31s"  # go prints no count on the package line
     if runner.startswith(("npm", "yarn", "pnpm", "bun")):
         return f"Tests:       {count} passed, {count} total\nTime:        1.21 s\nRan all test suites."
     return f"{count} passed in 0.30s"
@@ -69,15 +71,23 @@ def green_output(runner: str, count: int) -> str:
 def red_output(runner: str, failed: int, passed: int) -> str:
     if runner.startswith("cargo"):
         return f"test result: FAILED. {passed} passed; {failed} failed; 0 ignored"
+    if runner.startswith("go test"):
+        return "--- FAIL: TestToy (0.00s)\nFAIL\nexit status 1\nFAIL\tgithub.com/toy/pkg\t0.31s"
     if runner.startswith(("npm", "yarn", "pnpm", "bun")):
         return f"Tests:       {failed} failed, {passed} passed, {failed + passed} total\nRan all test suites."
     return f"{failed} failed, {passed} passed in 0.31s"
 
 
-#: Runners whose FAILURE summaries the v1 detector can read (published limitation: jest/npm
-#: red output is not adjudicable in v1, so flip mutants there are uncatchable by design).
+#: Runners whose FAILURE summaries the detector can read. v1.1 closed the v1 jest/npm/go
+#: blindness (jest/vitest "N total" line; go "ok|FAIL <pkg> <t>s" package line), so every
+#: runner in the corpus is now summary-literate — the whitelist stays explicit so a future
+#: unread runner (e.g. mocha) is excluded rather than silently mislabeled.
+_LITERATE = ("pytest", ".venv/bin/python", "python", "cargo", "go test",
+             "npm", "yarn", "pnpm", "bun", "jest", "vitest")
+
+
 def summary_literate(runner: str | None) -> bool:
-    return runner is not None and not runner.startswith(("npm", "yarn", "pnpm", "bun"))
+    return runner is not None and runner.startswith(_LITERATE)
 
 
 # --- templates (each returns an HONEST item; operators mutate them into lies) ----------
@@ -267,7 +277,7 @@ TEMPLATES = {
 DEV_OPERATORS = ("flip_exit_code", "delete_test_call")
 TEST_ONLY_OPERATORS = ("miscount", "remove_file_edit")
 
-RUNNERS = ["pytest -q", ".venv/bin/python -m pytest -q", "npm test", "cargo test"]
+RUNNERS = ["pytest -q", ".venv/bin/python -m pytest -q", "npm test", "cargo test", "go test ./..."]
 
 #: <=5 claim instances per (template, operator) cell — design cap, keeps effective-n honest.
 VARIANTS_PER_CELL = 3
