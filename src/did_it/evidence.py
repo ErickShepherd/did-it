@@ -315,9 +315,14 @@ _FAMILY_PATTERNS = dict(_FAMILIES)
 #: review of this branch measured 26s at 160KB with a free `\S+\.` scan): file targets are
 #: matched per whitespace token (anchored, length-gated), selectors on a capped prefix.
 _TARGET_FILE_TOKEN = re.compile(r"(\S{1,500}\.(?:py|rs|go|ts|tsx|js|jsx|rb|java|cc?|cpp))(?:::(\S{1,500}))?$")
-_TARGET_SELECT = re.compile(r"\s-(?:k|m)[= ]{1,8}(['\"]?)([\w~<>=. -]{1,256})\1")
+#: pytest -k/-m (separated OR glued: `-kfoo`), go test -run. Bare-word cargo/go name
+#: filters (`cargo test my_test`) are NOT recognized — known limitation, noted in D4a.
+_TARGET_SELECT = re.compile(r"\s-(?:k|m|run)[= ]{0,8}(['\"]?)([\w~<>=. -]{1,256})\1")
 _SELECT_SCAN_CAP = 4096
+_SELECT_STRADDLE = 16  # overlap window so a flag straddling the cap is still seen
 _TOKEN_LENGTH_CAP = 512
+#: Option values that name what a run EXCLUDES — never what it is scoped to.
+_EXCLUDE_FLAGS = frozenset({"--deselect", "--ignore", "--ignore-glob"})
 
 
 def summary_passed_count(run: Run) -> int | None:
@@ -358,19 +363,29 @@ def target_tokens(command: str) -> set[str]:
     out: set[str] = set()
     for sel in _TARGET_SELECT.finditer(args[:_SELECT_SCAN_CAP]):
         out.update(w for w in re.findall(r"\w+", sel.group(2)) if len(w) >= 3)
-    tail = args[_SELECT_SCAN_CAP:]
-    if " -k" in tail or " -m" in tail:
-        # A selector beyond the scan cap: mark the run targeted with a token no claim can
-        # name, so the guard abstains — never the accusing direction on unscanned input.
+    tail = args[max(0, _SELECT_SCAN_CAP - _SELECT_STRADDLE):]
+    if len(args) > _SELECT_SCAN_CAP and ("-k" in tail or "-m" in tail or "-run" in tail):
+        # A selector at/beyond the scan cap: mark the run targeted with a token no claim
+        # can name, so the guard abstains — never the accusing direction on unscanned input.
         out.add("\x00selector-beyond-scan-cap")
+    prev = ""
     for tok in QUOTED.sub(" ", args).split():
-        if len(tok) > _TOKEN_LENGTH_CAP:
+        is_flag_or_excluded = tok.startswith("-") or prev in _EXCLUDE_FLAGS
+        prev = tok
+        if is_flag_or_excluded or len(tok) > _TOKEN_LENGTH_CAP:
             continue
         f = _TARGET_FILE_TOKEN.match(tok)
         if f:
             out.add(f.group(1).rsplit("/", 1)[-1])
             if f.group(2):
                 out.add(f.group(2))
+        elif "::" in tok:
+            # bare node path (cargo test tests::case) — targeted even without a file ext.
+            # Generic segments ("tests") are excluded: any pass-claim contains them, which
+            # would read as naming the target and un-suppress the accusation.
+            out.update(
+                p for p in tok.split("::") if len(p) >= 3 and p.lower() not in ("test", "tests")
+            )
     return out
 
 

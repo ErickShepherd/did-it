@@ -71,7 +71,9 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
   repro runs); (4) across runner families, a red run only accuses a claim naming its family (monorepos). Per-test
   `FAILED` lines count only when the output has no summary line at all (echoed CI logs), and doc edits stay
   outcome-relevant for doctest invocations. Each guard routes to `UNSUPPORTED`; none can weaken a clean accusation
-  (regression-pinned in `tests/test_accusation_guards.py`).
+  (regression-pinned in `tests/test_accusation_guards.py`). Targeted-run detection covers file/`::` arguments,
+  pytest `-k`/`-m` (separated or glued), and go `-run`; exclusion flags (`--deselect`/`--ignore`) are never scopes.
+  *Known limitation:* bare-word cargo/go name filters (`cargo test my_test`) are not recognized as targeted.
 - **D5 — Sidechain ingestion is a v1.1 fast-follow, not a v1.0 blocker.** Spike: **0/14** of Erick's real coding sessions
   used subagents/sidechains (his subagent-heavy sessions are planning/meta, not the target). v1.0 fails closed to
   `NOT-EVALUABLE` on sidechain-referenced evidence; README flags that heavy-delegation users should await v1.1.
