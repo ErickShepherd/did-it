@@ -119,7 +119,11 @@ TEST_NEG = re.compile(
     r"(?:don't|do not|doesn't|does not|didn't|did not|can't|cannot|couldn't|never)\s+pass)\b",
     re.I,
 )
-TEST_NEG_EXEMPT = re.compile(r"\bno longer fail|without (?:a |any )?fail|0 failed\b", re.I)
+TEST_NEG_EXEMPT = re.compile(
+    r"\bno longer fail|without (?:a |any )?fail|0 failed\b"
+    r"|\bno (?:new )?(?:fail(?:ures|ings|ed)?|errors?|regressions?)\b",  # "…, no failures."
+    re.I,
+)
 
 TEST_FAIL = re.compile(
     rf"\b(?:{_NUM}\s+)?tests?\s+(?:still\s+)?(?:fail(?:s|ed|ing)?|(?:are|is)\s+(?:red|failing|broken))\b"
@@ -175,7 +179,9 @@ BIND_TOKEN = re.compile(r"[\w./-]*(?:/|\.)[\w./-]+|\b(?:pytest|ruff|mypy|npm|car
 def _classify(sentence: str) -> Claim | None:
     """Classify one clean prose sentence; None if it makes no claim at all."""
     c = Claim(text=sentence, utterance_index=-1)
-    c.tokens = BIND_TOKEN.findall(sentence)
+    # rstrip: BIND_TOKEN swallows sentence-final punctuation ("… requirements.txt."),
+    # which broke binding against the exactly-matching command (panel, seat-4).
+    c.tokens = [t.rstrip(".,;:!?") for t in BIND_TOKEN.findall(sentence)]
 
     negated = bool(TEST_NEG.search(sentence)) and not TEST_NEG_EXEMPT.search(sentence)
     m = TEST_PASS.search(sentence)
@@ -223,6 +229,20 @@ def _classify(sentence: str) -> Claim | None:
     return None
 
 
+#: Explicit outcome-claim patterns that OVERRIDE the process-narration drop: "All tests
+#: pass in the worktree" is a checkable claim even though it carries workflow vocabulary
+#: (panel, seat-4: the filter was overfit to the author's process words). command-ran and
+#: semantic verbs deliberately do NOT override — they saturate genuine narration.
+def _has_checkable_pattern(sentence: str) -> bool:
+    return bool(
+        TEST_PASS.search(sentence)
+        or TEST_FAIL.search(sentence)
+        or CHECK_PASS.search(sentence)
+        or EXIT_CODE.search(sentence)
+        or FILE_CREATED.search(sentence)
+    )
+
+
 # --- 1. segmentation --------------------------------------------------------------------
 
 FENCE = re.compile(r"^\s*(```|~~~)")
@@ -261,7 +281,7 @@ def extract_claims(session) -> list[Claim]:  # noqa: ANN001  (Session; avoid imp
             if not isinstance(text, str):
                 continue  # malformed block internals fail closed, never crash (C4)
             for sent in sentences(text):
-                if is_process_narration(sent):
+                if is_process_narration(sent) and not _has_checkable_pattern(sent):
                     continue  # NOT-A-CLAIM
                 if not is_assertive(sent):
                     continue  # hedges/futures are never gated (the false-verdict hazard)
