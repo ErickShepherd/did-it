@@ -46,6 +46,9 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as e:
         print(f"did-it: cannot read transcript: {e}", file=sys.stderr)
         return 2
+    except Exception as e:  # noqa: BLE001 — exit 1 is reserved for CONTRADICTED (panel C3)
+        print(f"did-it: internal error: {type(e).__name__}: {e}", file=sys.stderr)
+        return 2
     print(report.render(receipts), end="")
     return report.exit_code(receipts)
 

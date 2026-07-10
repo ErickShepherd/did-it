@@ -42,8 +42,23 @@ QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"")
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1.*?^\2$", re.S | re.M)
 
 
+#: HEREDOC's lazy body scan is quadratic on unterminated `<<X` floods (review round 3:
+#: 15.5s at 160KB) — each opener scans to end-of-string. Capping the OPENER COUNT bounds
+#: the total work to ~cap×len (a plain long command with few `<<` strips linearly). An
+#: opener-flooded command is treated as NOT a test command — it can then never be a
+#: witness for OR against any claim (pure abstention; skipping the strip instead could
+#: mint a phantom red run, i.e. an accusation).
+_HEREDOC_OPENER_CAP = 64
+
+
+def _strippable(command: str) -> bool:
+    return command.count("<<") <= _HEREDOC_OPENER_CAP
+
+
 def is_test_command(command: str) -> bool:
     """True if the Bash command actually invokes a test runner (not merely mentions one)."""
+    if not _strippable(command):
+        return False
     stripped = HEREDOC.sub(" ", command)
     stripped = QUOTED.sub(" ", stripped)
     return bool(TEST_RUNNERS.search(stripped))
@@ -55,15 +70,27 @@ def is_test_command(command: str) -> bool:
 #: read off the framework's own SUMMARY LINE (pytest's "... in N.NNs" line, cargo's
 #: "test result:"), never from arbitrary output — an AssertionError traceback or another
 #: tool's error count may belong to a neighbouring sub-command.
-SUMMARY_LINE = re.compile(
-    r"^.*(?:\b\d[\d,]*\s+(?:passed|failed|errors?|skipped)\b.*\bin\s+[\d.]+s"
-    r"|\btest result: (?:ok|FAILED)\b).*$",
-    re.M,
-)
+#: A summary line carries a count clause AND a duration clause (pytest), or the cargo
+#: marker. Matched PER LINE with independent linear searches — the previous single
+#: `^.*(...).*$` pattern backtracked quadratically on near-match floods (panel C5:
+#: 10s at 144KB, extrapolating to hours on a multi-MB untrusted tool_result).
+_SUMMARY_COUNTS = re.compile(r"\b\d[\d,]*\s+(?:passed|failed|errors?|skipped)\b")
+_SUMMARY_TIME = re.compile(r"\bin\s+[\d.]+s\b")
+_SUMMARY_CARGO = re.compile(r"\btest result: (?:ok|FAILED)\b")
 _FAILED_COUNT = re.compile(r"\b[1-9]\d*\s+(?:failed|errors?)\b|\btest result: FAILED\b", re.I)
 _PASSED_COUNT = re.compile(r"\b\d[\d,]*\s+passed\b|\btest result: ok\b")
 #: pytest short-summary per-test lines are framework-authored and unambiguous on their own.
 FAILED_LINE = re.compile(r"^(?:FAILED|ERROR)\s+\S+::", re.M)
+
+
+def _is_summary_line(line: str) -> bool:
+    # No length cap and no output truncation: every component search is linear, and any
+    # bound that can drop a genuine green summary re-opens the C2 false accusation
+    # (review round 2 demonstrated exactly that with a 256KB tail cap).
+    return bool(
+        (_SUMMARY_COUNTS.search(line) and _SUMMARY_TIME.search(line))
+        or _SUMMARY_CARGO.search(line)
+    )
 
 
 @dataclass
@@ -78,7 +105,7 @@ class Run:
     is_test_run: bool
 
     def _summary_lines(self) -> list[str]:
-        return [m.group(0) for m in SUMMARY_LINE.finditer(self.output)]
+        return [line for line in self.output.splitlines() if _is_summary_line(line)]
 
     @property
     def framework_failed(self) -> bool:
@@ -187,6 +214,8 @@ def build_index(session) -> Index:  # noqa: ANN001
                 if use is None:
                     continue
                 _, name, tool_input = use
+                if not isinstance(tool_input, dict):
+                    tool_input = {}  # malformed block internals fail closed, never crash (C4)
                 output = _result_text(block.get("content"))
                 if name == "Bash":
                     command = str(tool_input.get("command") or "")

@@ -6,9 +6,19 @@ CONTRADICTED (abstention is never failure).
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 
 from .verdicts import FAILING_VERDICTS, Receipt
+
+#: Claim text and notes are untrusted transcript content rendered to a terminal: C0/C1
+#: controls (ANSI cursor-up/erase can visually rewrite a CONTRADICTED row) and Unicode
+#: bidi overrides are neutralized; a newline would forge a whole receipt row (panel C6).
+_UNSAFE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]")
+
+
+def _sanitize(text: str) -> str:
+    return _UNSAFE.sub("�", text)
 
 
 def render(receipts: list[Receipt]) -> str:
@@ -18,10 +28,10 @@ def render(receipts: list[Receipt]) -> str:
     lines = []
     width = max(len(r.verdict.value) for r in receipts)
     for r in receipts:
-        evidence = r.evidence_ref or "-"
-        lines.append(f"{r.verdict.value:<{width}}  [{evidence}]  {r.claim_text}")
+        evidence = _sanitize(r.evidence_ref or "-")
+        lines.append(f"{r.verdict.value:<{width}}  [{evidence}]  {_sanitize(r.claim_text)}")
         for note in r.notes:
-            lines.append(f"{'':<{width}}      · {note}")
+            lines.append(f"{'':<{width}}      · {_sanitize(note)}")
     counts = Counter(r.verdict.value for r in receipts)
     summary = " · ".join(f"{v}: {n}" for v, n in sorted(counts.items()))
     lines.append("")

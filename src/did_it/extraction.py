@@ -257,7 +257,10 @@ def extract_claims(session) -> list[Claim]:  # noqa: ANN001  (Session; avoid imp
         for block in session.content_blocks(idx):
             if block.get("type") != "text":
                 continue  # thinking / tool_use are not user-facing prose
-            for sent in sentences(block.get("text") or ""):
+            text = block.get("text")
+            if not isinstance(text, str):
+                continue  # malformed block internals fail closed, never crash (C4)
+            for sent in sentences(text):
                 if is_process_narration(sent):
                     continue  # NOT-A-CLAIM
                 if not is_assertive(sent):

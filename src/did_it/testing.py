@@ -148,10 +148,14 @@ class SessionBuilder:
     # -- output -----------------------------------------------------------------
 
     def write_jsonl(self, path: Path, *, marker: bool = True) -> Path:
-        """Serialize to .jsonl. The marker record satisfies the leak gate for committed fixtures."""
+        """Serialize to .jsonl. The marker record satisfies the leak gate for committed fixtures.
+
+        ensure_ascii=False matches the real writer (Node's JSON.stringify emits raw UTF-8
+        and does NOT escape U+2028/U+2029/NEL) — fixtures must exercise the same bytes.
+        """
         lines = []
         if marker:
             lines.append(json.dumps({"type": "fixture-marker", "marker": "FIXTURES_ONLY"}))
-        lines += [json.dumps(r) for r in self.records]
-        path.write_text("\n".join(lines) + "\n")
+        lines += [json.dumps(r, ensure_ascii=False) for r in self.records]
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
         return path

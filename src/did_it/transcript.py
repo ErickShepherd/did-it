@@ -78,36 +78,45 @@ def parse(path: str | Path) -> Session:
     """
     path = Path(path)
     session = Session(path=path)
-    with path.open(encoding="utf-8") as fh:
-        for lineno, line in enumerate(fh, 1):
-            if not line.strip():
-                continue
-            try:
-                rec = json.loads(line)
-            except json.JSONDecodeError as e:
-                raise ParseFailure(f"{path.name}:{lineno}: unparseable line") from e
-            if not isinstance(rec, dict):
-                raise ParseFailure(f"{path.name}:{lineno}: non-object record")
-            if rec.get("type") not in MESSAGE_TYPES:
-                continue  # queue-operation / ai-title / fixture-marker / etc.
+    try:
+        # split("\n"), NOT splitlines(): U+2028/U+2029/NEL are legal UNESCAPED inside JSON
+        # strings and the real writer (Node's JSON.stringify) emits them raw — splitting on
+        # them fragments a valid record and silently NOT-EVALUABLEs the whole session.
+        # read_text's universal-newline mode already normalizes \r\n and \r to \n.
+        lines = path.read_text(encoding="utf-8").split("\n")
+    except UnicodeDecodeError as e:
+        # Byte-corrupt input is NOT-EVALUABLE, never a crash: an escaped exception exits
+        # the CLI with 1 — the code reserved for CONTRADICTED (panel 2026-07-10, C3).
+        raise ParseFailure(f"{path.name}: not valid UTF-8") from e
+    for lineno, line in enumerate(lines, 1):
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError as e:
+            raise ParseFailure(f"{path.name}:{lineno}: unparseable line") from e
+        if not isinstance(rec, dict):
+            raise ParseFailure(f"{path.name}:{lineno}: non-object record")
+        if rec.get("type") not in MESSAGE_TYPES:
+            continue  # queue-operation / ai-title / fixture-marker / etc.
 
-            version = rec.get("version")
-            if not isinstance(version, str) or not is_supported_version(version):
-                raise UnknownSchema(f"{path.name}:{lineno}: schema version {version!r}")
-            session.schema_version = session.schema_version or version
+        version = rec.get("version")
+        if not isinstance(version, str) or not is_supported_version(version):
+            raise UnknownSchema(f"{path.name}:{lineno}: schema version {version!r}")
+        session.schema_version = session.schema_version or version
 
-            message = rec.get("message")
-            if not isinstance(message, dict) or not isinstance(message.get("content"), (list, str)):
-                raise ParseFailure(f"{path.name}:{lineno}: message without content")
+        message = rec.get("message")
+        if not isinstance(message, dict) or not isinstance(message.get("content"), (list, str)):
+            raise ParseFailure(f"{path.name}:{lineno}: message without content")
 
-            if rec.get("isSidechain"):
+        if rec.get("isSidechain"):
+            session.used_subagents = True
+            continue  # sidechain records are not ingested in v1 (D5)
+
+        session.records.append(rec)
+        for block in _blocks(message):
+            if block.get("type") == "tool_use" and block.get("name") == "Task":
                 session.used_subagents = True
-                continue  # sidechain records are not ingested in v1 (D5)
-
-            session.records.append(rec)
-            for block in _blocks(message):
-                if block.get("type") == "tool_use" and block.get("name") == "Task":
-                    session.used_subagents = True
     return session
 
 
