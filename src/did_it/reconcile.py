@@ -85,7 +85,9 @@ def _passed_count(output: str) -> int | None:
 
 def _named_check(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
     tool_word = claim.tokens[0] if claim.tokens else ""
-    runs = [r for r in index.runs_before(claim.utterance_index) if tool_word and tool_word in r.command]
+    # invocation-anchored, not substring: `grep -rn ruff pyproject.toml` is not a ruff
+    # run and its exit 0 must not endorse "ruff is clean" (panel C7, probe P6b)
+    runs = [r for r in index.runs_before(claim.utterance_index) if ev.runs_tool(r.command, tool_word)]
     if not runs:
         return _absent(claim, session, f"no '{tool_word}' run at utterance-time")
     run = runs[-1]
@@ -101,10 +103,16 @@ def _named_check(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
 def _command_ran(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
     tokens = [t for t in claim.tokens if len(t) >= 3]
     for run in reversed(index.runs_before(claim.utterance_index)):
-        if any(t in run.command for t in tokens):
+        # path tokens bind by quote-stripped substring; bare tool words must be actual
+        # invocations — `pip install pytest` never backs "I ran pytest" (panel C7, P6a)
+        if ev.binds_command(tokens, run.command):
             e = ev.Evidence(tool="Bash", ref=run.ref, exit_code=run.exit_code,
                             at_index=run.index, tier="witness")
-            return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e)
+            if run.exit_code == 0:
+                return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e)
+            # it ran and FAILED: never an endorsement, never an accusation (P6d)
+            return _receipt(claim, Verdict.UNSUPPORTED, e,
+                            note=f"matching command exited {run.exit_code}")
     return _absent(claim, session, "no matching command at utterance-time")
 
 

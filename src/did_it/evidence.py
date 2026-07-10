@@ -16,6 +16,7 @@ The index is built once per session:
 
 from __future__ import annotations
 
+import functools
 import re
 from dataclasses import dataclass
 
@@ -42,26 +43,37 @@ QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"")
 HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1.*?^\2$", re.S | re.M)
 
 
-#: HEREDOC's lazy body scan is quadratic on unterminated `<<X` floods (review round 3:
-#: 15.5s at 160KB) — each opener scans to end-of-string. Capping the OPENER COUNT bounds
-#: the total work to ~cap×len (a plain long command with few `<<` strips linearly). An
-#: opener-flooded command is treated as NOT a test command — it can then never be a
-#: witness for OR against any claim (pure abstention; skipping the strip instead could
-#: mint a phantom red run, i.e. an accusation).
+#: HEREDOC's lazy body scan is quadratic on unterminated `<<X` floods (review round 3 of
+#: the fail-closed branch: 15.5s at 160KB) — each opener scans to end-of-string. Capping
+#: the OPENER COUNT bounds the total work to ~cap×len (a plain long command with few `<<`
+#: strips linearly). An opener-flooded command is treated as NOT a test command, so it is
+#: never a witness for OR against any claim. Caveat (that branch's round-4 review): this
+#: drop also removes a would-be GREEN witness from the conflicting-green guard, so on a
+#: crafted >64-opener green run the guard cannot suppress a later accusation — accepted
+#: as implausible input; do not widen the cap or the guards assuming the drop is free.
 _HEREDOC_OPENER_CAP = 64
+
+#: Runner invocations that don't EXECUTE tests: their exit 0 carries no outcome evidence
+#: (`pytest --version` exit-0 endorsed "All 500 tests pass" — panel C7, probe P6c).
+_NON_EXECUTING = re.compile(
+    r"\s--?(?:version|help|h\b|collect-only|co\b|fixtures|markers|setup-only|setup-plan|list)\b"
+)
 
 
 def _strippable(command: str) -> bool:
     return command.count("<<") <= _HEREDOC_OPENER_CAP
 
 
+def _stripped(command: str) -> str:
+    return QUOTED.sub(" ", HEREDOC.sub(" ", command))
+
+
 def is_test_command(command: str) -> bool:
-    """True if the Bash command actually invokes a test runner (not merely mentions one)."""
+    """True if the Bash command actually EXECUTES a test runner (not merely mentions one)."""
     if not _strippable(command):
         return False
-    stripped = HEREDOC.sub(" ", command)
-    stripped = QUOTED.sub(" ", stripped)
-    return bool(TEST_RUNNERS.search(stripped))
+    stripped = _stripped(command)
+    return bool(TEST_RUNNERS.search(stripped)) and not _NON_EXECUTING.search(stripped)
 
 #: Test-framework outcome markers, deliberately narrow (anchor calibration 2026-07-10: compound
 #: Bash commands make the command exit code an unreliable witness for the TEST outcome — three
@@ -280,7 +292,14 @@ def last_relevant_edit_index(index: Index, run: Run, claim_index: int) -> int | 
 
 
 def classify_outcome(run: Run) -> tuple[str, str | None]:
-    """(green / red / ambiguous, note) — the TEST outcome of one run, framework-first (D4)."""
+    """(green / red / ambiguous, note) — the TEST outcome of one run, framework-first (D4).
+
+    Exit 0 alone is green only when the framework's own summary shows no failures: a
+    masked exit (`pytest || true`) beside a visible red summary endorsed a fake pass-claim
+    (panel C7). Never an accusation either way — D4 requires a non-zero exit.
+    """
+    if run.exit_code == 0 and run.framework_failed:
+        return "ambiguous", "exit 0 but the framework summary reports failures"
     if run.exit_code == 0 or run.framework_green:
         note = (
             f"compound command exited {run.exit_code}; framework summary green"
@@ -442,6 +461,45 @@ def target_tokens(command: str) -> set[str]:
 def _claim_names(text: str, tokens: set[str]) -> bool:
     low = text.lower()
     return any(t.lower() in low for t in tokens if t)
+
+
+# --- claim-to-command binding (panel C7: substring matching endorsed non-runs) ----------
+
+
+@functools.lru_cache(maxsize=256)
+def _tool_position_re(word: str) -> re.Pattern[str]:
+    w = re.escape(word)
+    # IGNORECASE rather than lowering the command: a lowered command can never match the
+    # env-prefix skip ([A-Z_]...=), silently unbinding real `CI=1 pytest`-style runs.
+    return re.compile(
+        rf"(?:^|[;|]|&&|\|\||\$\(|`)\s*(?:[A-Z_][A-Z0-9_]*=\S+\s+)*"
+        rf"(?:\S*/)?(?:{w}|python3?\s+-m\s+{w}|(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?{w})\b(?!=)",
+        re.M | re.I,
+    )  # (?!=): an env-var NAME (`MYPY=1 pytest`) is not an invocation of the tool
+
+
+def runs_tool(command: str, word: str) -> bool:
+    """True if `command` INVOKES `word` at a command position (directly, `python -m`, or
+    an npm-style runner) — `pip install pytest` and `grep ruff …` do not run the tool."""
+    if not word or not _strippable(command):
+        return False
+    return bool(_tool_position_re(word.lower()).search(_stripped(command)))
+
+
+def binds_command(tokens: list[str], command: str) -> bool:
+    """True if any claim token binds to the command: path-ish tokens (with / or .) match
+    as substrings of the quote-stripped command; bare tool words must be invocations."""
+    if not _strippable(command):
+        return False
+    stripped = _stripped(command)
+    for t in tokens:
+        if not t:
+            continue
+        if ("/" in t or "." in t) and t in stripped:
+            return True
+        if runs_tool(command, t):
+            return True
+    return False
 
 
 def accusation_guard(index: Index, claim, run: Run) -> str | None:  # noqa: ANN001
