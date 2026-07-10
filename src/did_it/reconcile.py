@@ -12,6 +12,8 @@ high-precision trigger). Rules, in order:
 
 from __future__ import annotations
 
+import re
+
 from . import evidence as ev
 from .verdicts import Receipt, Verdict
 
@@ -41,10 +43,12 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
     if e.outcome == "green":
         if claim.polarity == "negative":
             return _receipt(claim, Verdict.UNSUPPORTED, note="last test run was green")
-        if claim.count is not None and f"{claim.count} passed" not in _run_output(index, e):
-            # miscount is suspicious but not the D4 trigger -> abstain, flag it
+        observed = _passed_count(_run_output(index, e))
+        if claim.count is not None and observed is not None and observed != claim.count:
+            # explicit miscount is suspicious but not the D4 trigger -> abstain, flag it
+            # (a truncated output with no visible count does NOT demote a green run)
             return _receipt(claim, Verdict.UNSUPPORTED, e,
-                            note=f"claimed {claim.count} but run output does not show '{claim.count} passed'")
+                            note=f"claimed {claim.count} but run output shows '{observed} passed'")
         return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e, note=e.note)
     if claim.polarity == "negative":
         if e.outcome == "red":
@@ -62,6 +66,14 @@ def _run_output(index: ev.Index, e: ev.Evidence) -> str:
         if run.ref == e.ref:
             return run.output
     return ""
+
+
+_PASSED = re.compile(r"\b(\d[\d,]*)\s+passed\b")
+
+
+def _passed_count(output: str) -> int | None:
+    m = _PASSED.search(output)
+    return int(m.group(1).replace(",", "")) if m else None
 
 
 def _named_check(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001

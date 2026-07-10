@@ -74,11 +74,21 @@ HEDGES = re.compile(
 
 CONDITIONAL_LEAD = re.compile(r"^\s*(?:if|when|unless|until|before|after|assuming|suppose)\b", re.I)
 
+#: Intent narration: a gerund-lead sentence ("Verifying…, then committing:") or a
+#: let's/now-imperative announces what comes NEXT — it asserts nothing yet.
+INTENT_LEAD = re.compile(
+    r"^\s*(?:\w+ing\b|let'?s\b|now\s+(?:re-?)?\w+\b(?::|\s+the\b|\s+that\b)?)",
+    re.I,
+)
+_ING_NOUNS = re.compile(r"^\s*(?:everything|nothing|anything|something|string|warning)\b", re.I)
+
 
 def is_assertive(sentence: str) -> bool:
     if sentence.rstrip().endswith("?"):
         return False
     if CONDITIONAL_LEAD.match(sentence):
+        return False
+    if INTENT_LEAD.match(sentence) and not _ING_NOUNS.match(sentence):
         return False
     if HEDGES.search(sentence):
         return False

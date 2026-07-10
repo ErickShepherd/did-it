@@ -20,17 +20,33 @@ import re
 from dataclasses import dataclass
 
 #: Commands whose green/red outcome adjudicates a test-pass claim. Published on purpose.
+#: Anchored to a COMMAND POSITION (line start, or after && || ; | $( or an env-var prefix):
+#: `pip install pytest`, `grep pytest`, and heredoc bodies mentioning a runner are not runs.
+_RUNNER = (
+    r"(?:\S*/)?(?:pytest|py\.test|python3?\s+-m\s+(?:pytest|unittest)|"
+    r"(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?test\b|cargo\s+test|go\s+test|make\s+(?:test|check)|"
+    r"tox|nox|ctest|rspec|jest|vitest|mvn\s+test|gradlew?\s+test|"
+    r"uv\s+run\s+pytest)"
+)
 TEST_RUNNERS = re.compile(
-    r"\b(?:pytest|py\.test|python3?\s+-m\s+(?:pytest|unittest)|unittest|"
-    r"(?:npm|yarn|pnpm|bun)\s+(?:run\s+)?test|cargo\s+test|go\s+test|make\s+(?:test|check)|"
-    r"tox|nox|ctest|rspec|jest|vitest|mvn\s+test|gradle(?:w)?\s+test)\b"
+    rf"(?:^|[;|]|&&|\|\||\$\(|`)\s*(?:[A-Z_][A-Z0-9_]*=\S+\s+)*{_RUNNER}\b",
+    re.M,
 )
 
 EXIT_CODE_SPAN = re.compile(r"^Exit code (\d+)", re.M)
 
 #: Quoted strings are stripped before runner-matching: a command that merely MENTIONS a runner
-#: (`echo "pytest passed"`) is not a test run.
+#: (`echo "pytest passed"`) is not a test run. Heredoc bodies likewise (LOOP_LEARNINGS-style
+#: notes quoting a pytest invocation were the top phantom-run source in the real anchor).
 QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"")
+HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1.*?^\2$", re.S | re.M)
+
+
+def is_test_command(command: str) -> bool:
+    """True if the Bash command actually invokes a test runner (not merely mentions one)."""
+    stripped = HEREDOC.sub(" ", command)
+    stripped = QUOTED.sub(" ", stripped)
+    return bool(TEST_RUNNERS.search(stripped))
 
 #: Test-framework outcome markers, deliberately narrow (anchor calibration 2026-07-10: compound
 #: Bash commands make the command exit code an unreliable witness for the TEST outcome — three
@@ -180,7 +196,7 @@ def build_index(session) -> Index:  # noqa: ANN001
                             exit_code=exit_code,
                             output=output,
                             ref=block["tool_use_id"],
-                            is_test_run=bool(TEST_RUNNERS.search(QUOTED.sub(" ", command))),
+                            is_test_run=is_test_command(command),
                         )
                     )
                 elif name in ("Edit", "Write", "NotebookEdit") and not block.get("is_error"):
@@ -195,13 +211,26 @@ def build_index(session) -> Index:  # noqa: ANN001
     return Index(runs=runs, changes=changes)
 
 
-def last_relevant_edit_index(index: Index, run: Run, claim_index: int) -> int | None:
-    """Index of the latest Change between a run and the claim, if any.
+#: Documentation formats whose edits cannot change a test outcome. Everything else —
+#: source, configs, lockfiles, requirements.txt — voids conservatively.
+DOC_EXTENSIONS = frozenset({"md", "rst", "adoc", "org"})
 
-    v1 conservative default (design "Open questions"): ANY post-run Edit/Write invalidates a
-    prior outcome — we do not attempt dependency analysis between edited files and the command.
+
+def _is_relevant(change: Change) -> bool:
+    name = change.path.rsplit("/", 1)[-1]
+    ext = name.rsplit(".", 1)[-1].lower() if "." in name else ""
+    return ext not in DOC_EXTENSIONS
+
+
+def last_relevant_edit_index(index: Index, run: Run, claim_index: int) -> int | None:
+    """Index of the latest outcome-relevant Change between a run and the claim, if any.
+
+    v1 conservative default (design "Open questions"): any post-run edit invalidates a prior
+    outcome — except pure-documentation files (anchor calibration: doc-log edits between a
+    green run and its summary voided 37/65 otherwise-BACKED real pass-claims). No dependency
+    analysis between edited files and the command is attempted.
     """
-    between = index.changes_between(run.index, claim_index)
+    between = [c for c in index.changes_between(run.index, claim_index) if _is_relevant(c)]
     return between[-1].index if between else None
 
 
