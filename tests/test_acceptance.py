@@ -1,0 +1,230 @@
+"""Acceptance tests — the observable contract of docs/design/did-it.md, written before the build.
+
+Each test pins a behavior the design promises (verdict semantics, fail-closed rules, exit codes).
+They drive the public surface only: did_it.check(path) and did_it.cli.main(argv).
+"""
+
+from __future__ import annotations
+
+import pytest
+
+import did_it
+from did_it.cli import main
+from did_it.verdicts import Verdict
+
+from .builder import SessionBuilder
+
+
+def verdict_of(receipts, fragment: str) -> Verdict:
+    """The verdict of the unique receipt whose claim text contains `fragment`."""
+    hits = [r for r in receipts if fragment in r.claim_text]
+    assert len(hits) == 1, f"expected exactly one claim containing {fragment!r}, got {hits}"
+    return hits[0].verdict
+
+
+# --- the hero path: two-tier BACKED (D3) -------------------------------------------
+
+
+def test_green_test_run_then_pass_claim_is_backed_transcript(tmp_path):
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "12 passed in 0.30s")
+    b.assistant_text("All 12 tests pass.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert verdict_of(receipts, "tests pass") == Verdict.BACKED_TRANSCRIPT
+
+
+def test_pass_claim_with_no_test_run_is_unsupported_never_contradicted(tmp_path):
+    b = SessionBuilder()
+    b.user_text("fix it")
+    b.edit("/work/toy-repo/app.py")
+    b.assistant_text("The tests pass.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+
+# --- CONTRADICTED: narrow, high-precision, temporally valid (D4) -------------------
+
+
+def test_pass_claim_after_red_test_run_is_contradicted(tmp_path):
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+    b.assistant_text("All tests pass.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
+
+
+def test_red_run_then_fix_edit_then_pass_claim_is_not_contradicted(tmp_path):
+    # The failure predates an edit the outcome depends on -> temporal check kills the accusation.
+    b = SessionBuilder()
+    b.user_text("fix the failing test")
+    b.bash("pytest -q", "1 failed in 0.30s", exit_code=1)
+    b.edit("/work/toy-repo/app.py")
+    b.assistant_text("The tests pass now.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+
+def test_green_run_invalidated_by_later_edit_is_unsupported(tmp_path):
+    # Conservative default: any post-run edit under test invalidates a prior pass-claim.
+    b = SessionBuilder()
+    b.user_text("run then tweak")
+    b.bash("pytest -q", "12 passed in 0.30s")
+    b.edit("/work/toy-repo/app.py")
+    b.assistant_text("All tests pass.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+
+def test_hedged_claim_is_never_gated(tmp_path):
+    # Non-assertive (future/hedge) prose must not produce CONTRADICTED even against red evidence.
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "1 failed in 0.30s", exit_code=1)
+    b.assistant_text("The tests should pass once the import is fixed.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert all(r.verdict != Verdict.CONTRADICTED for r in receipts)
+
+
+# --- routing: semantic and narration (Approach step 1) ------------------------------
+
+
+def test_semantic_claim_is_not_checkable(tmp_path):
+    b = SessionBuilder()
+    b.user_text("fix the bug")
+    b.edit("/work/toy-repo/app.py")
+    b.assistant_text("I fixed the bug and the code is much more readable now.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert receipts, "semantic claims must surface as NOT-CHECKABLE, not vanish"
+    assert {r.verdict for r in receipts} == {Verdict.NOT_CHECKABLE}
+
+
+def test_process_narration_produces_no_receipt(tmp_path):
+    b = SessionBuilder()
+    b.user_text("status?")
+    b.assistant_text("SIGN-OFF recorded; resolved autonomously per the reversibility rubric.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert receipts == []
+
+
+def test_thinking_blocks_are_not_claim_sources(tmp_path):
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "1 failed in 0.30s", exit_code=1)
+    b.assistant_thinking("All tests pass.")  # internal monologue, not a user-facing claim
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert receipts == []
+
+
+# --- fail-closed: schema + sidechains (D5, Risks) -----------------------------------
+
+
+def test_unknown_schema_version_fails_closed_to_not_evaluable(tmp_path):
+    b = SessionBuilder(version="9.0.0")
+    b.user_text("run the tests")
+    b.bash("pytest -q", "1 failed in 0.30s", exit_code=1)
+    b.assistant_text("All tests pass.")  # would be CONTRADICTED if adjudicated
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert receipts, "an unevaluable session must still surface a receipt"
+    assert {r.verdict for r in receipts} == {Verdict.NOT_EVALUABLE}
+
+
+def test_session_with_subagents_routes_unfound_evidence_to_not_evaluable(tmp_path):
+    # v1 does not ingest sidechains: evidence may exist there, so absence is NOT "unsupported".
+    b = SessionBuilder()
+    b.user_text("delegate the test run")
+    b.task("run the tests in a subagent")
+    b.assistant_text("All tests pass.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert verdict_of(receipts, "tests pass") == Verdict.NOT_EVALUABLE
+
+
+def test_corrupt_lines_fail_closed_to_not_evaluable(tmp_path):
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "1 failed in 0.30s", exit_code=1)
+    b.assistant_text("All tests pass.")
+    p = b.write_jsonl(tmp_path / "t.jsonl")
+    p.write_text(p.read_text() + "{not json\n")  # partial parse -> abstain, never accuse
+    receipts = did_it.check(p)
+    assert {r.verdict for r in receipts} == {Verdict.NOT_EVALUABLE}
+
+
+# --- noise tolerance ----------------------------------------------------------------
+
+
+def test_non_message_record_types_are_skipped(tmp_path):
+    b = SessionBuilder()
+    b.noise()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "3 passed in 0.10s")
+    b.assistant_text("All 3 tests pass.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert verdict_of(receipts, "tests pass") == Verdict.BACKED_TRANSCRIPT
+
+
+# --- CLI contract: exit codes + receipts on stdout ----------------------------------
+
+
+def test_cli_exits_zero_on_clean_session(tmp_path, capsys):
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "12 passed in 0.30s")
+    b.assistant_text("All 12 tests pass.")
+    rc = main([str(b.write_jsonl(tmp_path / "t.jsonl"))])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "BACKED-transcript" in out
+
+
+def test_cli_exits_nonzero_only_on_contradicted(tmp_path, capsys):
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "1 failed in 0.30s", exit_code=1)
+    b.assistant_text("All tests pass.")
+    rc = main([str(b.write_jsonl(tmp_path / "t.jsonl"))])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "CONTRADICTED" in out
+
+
+def test_cli_abstention_is_not_failure(tmp_path):
+    b = SessionBuilder(version="9.0.0")
+    b.user_text("hello")
+    b.assistant_text("I ran the linter.")
+    rc = main([str(b.write_jsonl(tmp_path / "t.jsonl"))])
+    assert rc == 0  # NOT-EVALUABLE / UNSUPPORTED never fail the build
+
+
+def test_cli_missing_file_is_usage_error(tmp_path):
+    rc = main([str(tmp_path / "nope.jsonl")])
+    assert rc == 2
+
+
+# --- receipts carry their evidence (auditable output) --------------------------------
+
+
+def test_backed_receipt_references_its_grounding_tool_call(tmp_path):
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "12 passed in 0.30s")
+    b.assistant_text("All 12 tests pass.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    (r,) = [x for x in receipts if x.verdict == Verdict.BACKED_TRANSCRIPT]
+    assert r.evidence_ref, "a BACKED verdict must point at its grounding tool call"
+    assert r.utterance_index is not None
+
+
+def test_unsupported_receipt_has_no_evidence_ref(tmp_path):
+    b = SessionBuilder()
+    b.user_text("fix it")
+    b.edit("/work/toy-repo/app.py")
+    b.assistant_text("The tests pass.")
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    (r,) = [x for x in receipts if x.verdict == Verdict.UNSUPPORTED]
+    assert r.evidence_ref is None
+
+
+if __name__ == "__main__":
+    raise SystemExit(pytest.main([__file__, "-q"]))
