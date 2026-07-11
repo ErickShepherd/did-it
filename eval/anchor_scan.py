@@ -30,11 +30,31 @@ CLAIMISH = ("pass", "fail", "green", "fixed", "created", "ran ", "clean", "works
 
 INFORMATIVE = {Verdict.BACKED_TRANSCRIPT, Verdict.BACKED_VERIFIED, Verdict.CONTRADICTED}
 
+#: --samples/--misses emit VERBATIM excerpts of real private sessions. They print only behind an
+#: explicit acknowledgment flag (so a redirect/paste can't leak content by accident) AND under a
+#: loud banner (design D7: aggregates may be published, content never leaves the machine).
+ACK_FLAG = "--print-verbatim-content"
+_LOCAL_ONLY_BANNER = (
+    "=" * 74 + "\n"
+    "  LOCAL-ONLY  ·  VERBATIM PRIVATE SESSION CONTENT BELOW\n"
+    "  Do NOT redirect, pipe, paste, commit, or share this output (design D7).\n"
+    + "=" * 74
+)
+
 
 def main(argv: list[str]) -> int:
     n = next((int(a) for a in argv if a.isdigit()), 50)
     show_samples = "--samples" in argv
     show_misses = "--misses" in argv
+    if (show_samples or show_misses) and ACK_FLAG not in argv:
+        print(
+            f"REFUSED: --samples/--misses print VERBATIM excerpts of real private sessions.\n"
+            f"Re-run locally with {ACK_FLAG} to acknowledge this is local-only output that must\n"
+            f"never be redirected, piped, pasted, committed, or shared (design D7). Aggregates\n"
+            f"(the numbers below) are safe to publish; the excerpts are not.",
+            file=sys.stderr,
+        )
+        show_samples = show_misses = False
 
     files = sorted(
         glob.glob(os.path.expanduser("~/.claude/projects/*/*.jsonl")),
@@ -88,12 +108,14 @@ def main(argv: list[str]) -> int:
     print(f"verdicts: {dict(verdicts)}")
     if total:
         print(f"informative-verdict rate: {informative}/{total} = {informative / total:.0%}")
+    if show_samples or show_misses:
+        print("\n" + _LOCAL_ONLY_BANNER)
     if show_samples:
-        print("\n--- extracted claim samples (verdict · claim) ---")
+        print("--- extracted claim samples (verdict · claim) ---")
         for v, text in samples:
             print(f"  {v:<18} {text}")
     if show_misses:
-        print("\n--- claim-ish sentences NOT gated (recall candidates) ---")
+        print("--- claim-ish sentences NOT gated (recall candidates) ---")
         for s in misses[:60]:
             print(f"  {s}")
     return 0

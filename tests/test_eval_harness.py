@@ -295,3 +295,38 @@ def test_cluster_bootstrap_ci_rejects_empty_values():
 
     with pytest.raises(ValueError):
         metrics.cluster_bootstrap_ci([], [], statistic=lambda v: 0.0)
+
+
+# --- anchor_scan privacy gate (audit 2026-07-10) --------------------------------------
+
+
+def test_anchor_scan_refuses_verbatim_without_ack(monkeypatch, capsys):
+    from eval import anchor_scan
+
+    monkeypatch.setattr(anchor_scan.glob, "glob", lambda *a, **k: [])  # no real transcripts
+    rc = anchor_scan.main(["--samples"])
+    err = capsys.readouterr().err
+    assert rc == 0
+    assert "REFUSED" in err and anchor_scan.ACK_FLAG in err
+
+
+def test_anchor_scan_prints_local_only_banner_with_ack(monkeypatch, capsys):
+    from eval import anchor_scan
+
+    monkeypatch.setattr(anchor_scan.glob, "glob", lambda *a, **k: [])
+    rc = anchor_scan.main(["--misses", anchor_scan.ACK_FLAG])
+    cap = capsys.readouterr()
+    assert rc == 0
+    assert "LOCAL-ONLY" in cap.out
+    assert "REFUSED" not in cap.err
+
+
+def test_anchor_scan_aggregates_need_no_ack(monkeypatch, capsys):
+    from eval import anchor_scan
+
+    monkeypatch.setattr(anchor_scan.glob, "glob", lambda *a, **k: [])
+    rc = anchor_scan.main(["5"])  # aggregate-only run
+    cap = capsys.readouterr()
+    assert rc == 0
+    assert "REFUSED" not in cap.err
+    assert "LOCAL-ONLY" not in cap.out
