@@ -97,6 +97,12 @@ class TestValidatorRejects:
         ):
             assert not verify.is_verifiable_command(cmd), cmd
 
+    def test_trailing_value_flag_with_no_value_is_rejected(self):
+        # A value-flag left dangling (`pytest -k` with nothing after) must fail closed, not be
+        # admitted with expect_value still True (audit 2026-07-10).
+        for cmd in ("pytest -k", "pytest -m", "pytest --maxfail", "pytest -k -q"):
+            assert not verify.is_verifiable_command(cmd), cmd
+
     def test_still_accepts_ordinary_test_arguments(self):
         for cmd in ("pytest -q tests/test_foo.py", "pytest -k expr", "pytest tests/",
                     "pytest --maxfail=1 -q", "pytest tests/test_a.py::test_b",

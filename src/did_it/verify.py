@@ -121,6 +121,8 @@ def is_verifiable_command(command: str) -> bool:
         if name in _FLAGS_NO_VALUE and not sep:
             continue
         return False   # unknown, glued, or code-loading flag → fail closed
+    if expect_value:
+        return False   # a trailing value-flag with no value (`pytest -k`) → fail closed
     # Same recognizer the outcome-reader uses: a runner at a command position, actually
     # executing tests. With no shell metacharacters present, that runner is the whole command.
     return ev.is_test_command(command)
