@@ -2,7 +2,7 @@
 
     did-it <transcript.jsonl> [--verify <repo>]
 
-Design: docs/design/did-it.md — "Observable contract". Exit codes: 0 = no accusation (including
+Design: docs/design/did-it.md — Approach (output + exit codes). Exit codes: 0 = no accusation (including
 abstentions), 1 = at least one CONTRADICTED claim, 2 = usage/IO error.
 """
 
