@@ -565,16 +565,31 @@ def runs_tool(command: str, word: str) -> bool:
     return bool(_tool_position_re(word.lower()).search(_stripped(command)))
 
 
+@functools.lru_cache(maxsize=256)
+def _path_boundary_re(token: str) -> re.Pattern[str]:
+    # A path token binds as a whole path SEGMENT, not a substring of a longer filename:
+    # `app.py` must not match `myapp.py` / `app.pyc` / `app.py.bak`. Reject a match flanked by
+    # filename-continuation chars ([\w.-]); a leading `/` is a valid boundary (`src/app.py`).
+    # A directory token (trailing `/`) prefix-matches its children, so it takes no right guard.
+    esc = re.escape(token)
+    tail = "" if token.endswith("/") else r"(?![\w.\-])"
+    return re.compile(rf"(?<![\w.\-]){esc}{tail}")
+
+
+def _binds_path(token: str, stripped: str) -> bool:
+    return bool(_path_boundary_re(token).search(stripped))
+
+
 def binds_command(tokens: list[str], command: str) -> bool:
-    """True if any claim token binds to the command: path-ish tokens (with / or .) match
-    as substrings of the quote-stripped command; bare tool words must be invocations."""
+    """True if any claim token binds to the command: path-ish tokens (with / or .) match as a
+    whole path SEGMENT of the quote-stripped command; bare tool words must be invocations."""
     if not _strippable(command):
         return False
     stripped = _stripped(command)
     for t in tokens:
         if not t:
             continue
-        if ("/" in t or "." in t) and t in stripped:
+        if ("/" in t or "." in t) and _binds_path(t, stripped):
             return True
         if runs_tool(command, t):
             return True
