@@ -195,3 +195,28 @@ class TestCountCapture:
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         (r,) = receipts
         assert r.verdict == Verdict.UNSUPPORTED  # claimed 13, run shows 12
+
+
+class TestAssertivenessRecall:
+    """The assertiveness gate over-dropped genuine accomplished claims (audit 2026-07-10, recall):
+    an adjectival-gerund lead, a completed after/when/once lead, and a bare identifier quote.
+    Intent narration, future/conditional leads, and attribution quotes still drop."""
+
+    def _classify(self, s):
+        from did_it import extraction
+        return extraction.is_assertive(s)
+
+    def test_recovered_accomplished_claims_are_assertive(self):
+        for s in ("Passing tests confirm the fix.",
+                  "After I fixed the bug, all tests pass.",
+                  "When I ran pytest, all 12 tests passed.",
+                  'The test "test_foo" passes.'):
+            assert self._classify(s) is True, s
+
+    def test_intent_future_and_attribution_still_drop(self):
+        for s in ("Verifying the config-reading tests still pass, then committing:",
+                  "Once the CI runs, tests will pass.",
+                  "If it fails, we should revert.",
+                  'He said "this will never work" about the plan.',
+                  "Committing the changes now."):
+            assert self._classify(s) is False, s

@@ -73,6 +73,13 @@ HEDGES = re.compile(
 )
 
 CONDITIONAL_LEAD = re.compile(r"^\s*(?:if|when|unless|until|before|after|assuming|suppose)\b", re.I)
+#: A completed `after/once/when <past-tense>, …` lead is an accomplished report, not a condition —
+#: "After I fixed the bug, all tests pass." asserts the main clause (audit 2026-07-10, recall).
+COMPLETED_LEAD = re.compile(
+    r"^\s*(?:after|once|when)\b[^,]*\b(?:ran|passed|failed|fixed|added|created|built|made|wrote|"
+    r"ended|finished|completed|updated|resolved|merged|committed|\w+ed)\b[^,]*,",
+    re.I,
+)
 
 #: Intent narration: a gerund-lead sentence ("Verifying…, then committing:") or a
 #: let's/now-imperative announces what comes NEXT — it asserts nothing yet.
@@ -81,18 +88,29 @@ INTENT_LEAD = re.compile(
     re.I,
 )
 _ING_NOUNS = re.compile(r"^\s*(?:everything|nothing|anything|something|string|warning)\b", re.I)
+#: An ADJECTIVAL gerund lead — a gerund directly followed by a bare noun (not a determiner/prep)
+#: and a main verb — is an assertion ("Passing tests confirm …"), not intent narration ("Verifying
+#: the … tests …") (audit 2026-07-10, recall).
+ADJECTIVAL_ING = re.compile(
+    r"^\s*\w+ing\s+(?!the\b|a\b|an\b|this\b|that\b|these\b|those\b|my\b|our\b|its\b|then\b|to\b"
+    r"|for\b|into\b|on\b|by\b|with\b|up\b|down\b|it\b|them\b|us\b|and\b|or\b)\w+s?\b\s+\w",
+    re.I,
+)
+#: Only ATTRIBUTION quoting suppresses — a multi-word "quoted phrase" or a curly-quote span. A
+#: short identifier quote (`"test_foo"`, `"config.py"`) is not attribution (audit 2026-07-10, recall).
+ATTRIBUTION_QUOTE = re.compile(r'"[^"\n]*\s[^"\n]*"|“')
 
 
 def is_assertive(sentence: str) -> bool:
     if sentence.rstrip().endswith("?"):
         return False
-    if CONDITIONAL_LEAD.match(sentence):
+    if CONDITIONAL_LEAD.match(sentence) and not COMPLETED_LEAD.match(sentence):
         return False
-    if INTENT_LEAD.match(sentence) and not _ING_NOUNS.match(sentence):
+    if INTENT_LEAD.match(sentence) and not _ING_NOUNS.match(sentence) and not ADJECTIVAL_ING.match(sentence):
         return False
     if HEDGES.search(sentence):
         return False
-    if sentence.count('"') >= 2 or sentence.count("“") >= 1:  # quoting someone else's words
+    if ATTRIBUTION_QUOTE.search(sentence):  # quoting someone else's words (not a bare identifier)
         return False
     return True
 
