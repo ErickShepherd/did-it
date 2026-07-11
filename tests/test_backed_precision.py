@@ -194,6 +194,36 @@ class TestNegationExemption:
         assert verdict_of(receipts, "still fail") == Verdict.BACKED_TRANSCRIPT
 
 
+class TestPassClauseNegationScoping:
+    """A pass-claim's negation is scoped to its own clause-through-end, so a failure word in an
+    unrelated EARLIER `;`-clause does not invert a genuine pass (audit 2026-07-10) — while a LIVE
+    failure alongside/after the pass stays negative (never a false accusation)."""
+
+    def test_earlier_broken_clause_does_not_invert_the_pass(self):
+        from did_it import extraction
+
+        c = extraction._classify("Fixed the broken import; all tests pass.")
+        assert c is not None
+        assert (c.kind, c.polarity) == ("test-pass", "positive")
+
+    def test_trailing_live_failure_keeps_the_pass_negative(self):
+        # Safety pin for the asymmetry: a failure reported AFTER the pass is a live caveat.
+        from did_it import extraction
+
+        c = extraction._classify("All tests pass; the suite still fails.")
+        assert c is not None
+        assert (c.kind, c.polarity) == ("test-fail", "negative")
+
+    def test_earlier_broken_clause_backs_a_green_run(self, tmp_path):
+        # end-to-end: the pass claim is now positive and, on a green run, BACKED — not lost.
+        b = SessionBuilder()
+        b.user_text("fix the import and run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("Fixed the broken import; all tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "all tests pass") == Verdict.BACKED_TRANSCRIPT
+
+
 class TestNarrationCoOccurrence:
     def test_checkable_claim_inside_workflow_narration_is_adjudicated(self, tmp_path):
         # seat-4: 'worktree' vocabulary silently dropped a co-occurring pass-claim.

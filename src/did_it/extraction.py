@@ -176,6 +176,19 @@ COUNT_FALLBACK = re.compile(rf"\b({_NUM})\s+(?:tests?\s+)?pass(?:ed|ing)?\b", re
 BIND_TOKEN = re.compile(r"[\w./-]*(?:/|\.)[\w./-]+|\b(?:pytest|ruff|mypy|npm|cargo|git|make|tox)\b")
 
 
+def _pass_clause_to_end(sentence: str, pos: int) -> str:
+    """The pass-claim's own `;`-clause through the end of the sentence.
+
+    Negation for a pass-claim is judged over this span, not the whole sentence: a failure word
+    in an EARLIER `;`-clause is prior context ("Fixed the broken import; all tests pass.") and
+    must not invert the pass, while a LIVE failure alongside or AFTER the pass ("all tests pass;
+    the suite still fails") stays in-span and keeps the claim negative — never a false accusation
+    (audit 2026-07-10). No `;` before `pos` -> the whole sentence (comma-joined partial reports
+    like "all tests pass, no new failures, though X still fails" are unchanged).
+    """
+    return sentence[sentence.rfind(";", 0, pos) + 1:]
+
+
 def _classify(sentence: str) -> Claim | None:
     """Classify one clean prose sentence; None if it makes no claim at all."""
     c = Claim(text=sentence, utterance_index=-1)
@@ -189,7 +202,13 @@ def _classify(sentence: str) -> Claim | None:
     # must stay negative (review: exemption-neutralized admissions were falsely accused).
     negated = bool(TEST_NEG.search(TEST_NEG_EXEMPT.sub(" ", sentence)))
     m = TEST_PASS.search(sentence)
-    if m and not negated:
+    # Scope the pass-claim's negation to its own clause-through-end span (see _pass_clause_to_end):
+    # an earlier `;`-clause must not invert a genuine pass. Other kinds keep sentence-level `negated`.
+    pass_negated = (
+        bool(TEST_NEG.search(TEST_NEG_EXEMPT.sub(" ", _pass_clause_to_end(sentence, m.start()))))
+        if m else negated
+    )
+    if m and not pass_negated:
         c.kind, c.is_procedural = "test-pass", True
         for g in ("count1", "count2", "count3", "count4"):
             if m.group(g):
@@ -201,7 +220,7 @@ def _classify(sentence: str) -> Claim | None:
             if m2:
                 c.count = int(m2.group(1).replace(",", ""))
         return c
-    if TEST_FAIL.search(sentence) or (m and negated):
+    if TEST_FAIL.search(sentence) or (m and pass_negated):
         c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
         return c
 
