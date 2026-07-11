@@ -436,7 +436,8 @@ _TARGET_SELECT = re.compile(
     r"(?:(['\"])(?P<quoted>[^'\"\n]{1,256})\1|(?P<bare>[\w~<>=.]{1,256}))"
 )
 _SELECT_SCAN_CAP = 4096
-_SELECT_STRADDLE = 16  # overlap window so a flag straddling the cap is still seen
+_SELECT_STRADDLE = 16  # lookback overlap: start the unscanned-tail check this many chars BEFORE
+#: the cap so a selector flag straddling the cap boundary is still caught (not a window width).
 _TOKEN_LENGTH_CAP = 512
 #: Option values that name what a run EXCLUDES or configures — never what it is scoped to.
 _NON_SCOPE_FLAGS = frozenset({
@@ -492,8 +493,11 @@ def target_tokens(command: str) -> set[str]:
             w for w in re.findall(r"\w+", sel.group("quoted") or sel.group("bare") or "")
             if len(w) >= 3 and w.lower() not in _GENERIC_TOKENS
         )
-    tail = args[max(0, _SELECT_SCAN_CAP - _SELECT_STRADDLE):]
-    if len(args) > _SELECT_SCAN_CAP and ("-k" in tail or "-m" in tail or "-run" in tail):
+    # The whole unscanned remainder (cap minus the straddle lookback, through end-of-args) — NOT a
+    # bounded window. A harmless superset: it re-covers the last _SELECT_STRADDLE chars finditer
+    # already scanned, which only risks re-flagging an already-captured selector (safe).
+    unscanned = args[max(0, _SELECT_SCAN_CAP - _SELECT_STRADDLE):]
+    if len(args) > _SELECT_SCAN_CAP and ("-k" in unscanned or "-m" in unscanned or "-run" in unscanned):
         # A selector at/beyond the scan cap: mark the run targeted with a token no claim
         # can name, so the guard abstains — never the accusing direction on unscanned input.
         out.add("\x00selector-beyond-scan-cap")
