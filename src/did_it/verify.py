@@ -19,6 +19,7 @@ time) — the caller keeps BACKED-transcript. Nothing here can produce CONTRADIC
 
 from __future__ import annotations
 
+import os
 import re
 import shlex
 import subprocess
@@ -61,6 +62,15 @@ def is_verifiable_command(command: str) -> bool:
     except ValueError:
         return False
     if not argv:
+        return False
+    # Confine the exec target to the repo tree or a PATH-resolved bare name. The reader's
+    # runner pattern allows a path prefix on argv[0] (`(?:\S*/)?pytest`), so without this an
+    # untrusted transcript could name a binary OUTSIDE the repo the user pointed --verify at
+    # (`/tmp/x/pytest`, `../../usr/bin/pytest`) — a real escape (review round 1). A bare name
+    # resolves via the user's PATH; an in-repo relative path (`.venv/bin/python`, `bin/pytest`)
+    # is the same trust as the repo's own test code, which any test run executes anyway.
+    exe = argv[0]
+    if os.path.isabs(exe) or exe.startswith("~") or ".." in exe.split("/"):
         return False
     # Same recognizer the outcome-reader uses: a runner at a command position, actually
     # executing tests. With no shell metacharacters present, that runner is the whole command.

@@ -55,6 +55,19 @@ class TestValidatorRejects:
                     "pytest --version", "ls -la"):
             assert not verify.is_verifiable_command(cmd), cmd
 
+    def test_rejects_out_of_repo_executable_paths(self):
+        # The transcript must not be able to pick a binary OUTSIDE the repo the user pointed
+        # --verify at: absolute paths, parent traversal, and ~-paths all escape it.
+        for cmd in ("/tmp/x/pytest", "/usr/bin/pytest -q", "../../../usr/bin/pytest",
+                    "../evil/pytest", "~/bin/pytest -q"):
+            assert not verify.is_verifiable_command(cmd), cmd
+
+    def test_accepts_in_repo_relative_runner_paths(self):
+        # Must NOT break the common real invocation `.venv/bin/python -m pytest`; in-repo
+        # relative paths are the same trust as the repo's own test code.
+        for cmd in (".venv/bin/python -m pytest -q", ".venv/bin/pytest", "./pytest", "bin/pytest"):
+            assert verify.is_verifiable_command(cmd), cmd
+
 
 class TestExecutorAggregation:
     """run_command classifies across N runs without touching a real runner (subprocess mocked)."""
