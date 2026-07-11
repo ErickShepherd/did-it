@@ -146,8 +146,13 @@ _BY_KIND = {
 }
 
 
-def reconcile(claims, session, *, verify: bool = False) -> list[Receipt]:  # noqa: ANN001
-    """Adjudicate claims against session evidence -> list[Receipt]. Deterministic, fail-closed."""
+def reconcile(claims, session, *, verify_repo: str | None = None) -> list[Receipt]:  # noqa: ANN001
+    """Adjudicate claims against session evidence -> list[Receipt]. Deterministic, fail-closed.
+
+    With `verify_repo`, a green in-transcript test-pass (`BACKED-transcript`) whose bound
+    command passes the validated-verbatim gate is re-executed there and, if green, upgraded to
+    `BACKED-verified` (upgrade-only — a red/flaky/errored re-run never accuses; see verify.py).
+    """
     index = ev.build_index(session)
     receipts: list[Receipt] = []
     for claim in claims:
@@ -155,4 +160,37 @@ def reconcile(claims, session, *, verify: bool = False) -> list[Receipt]:  # noq
             receipts.append(_receipt(claim, Verdict.NOT_CHECKABLE, note="semantic claim (v1 non-goal)"))
             continue
         receipts.append(_BY_KIND[claim.kind](claim, session, index))
+    if verify_repo is not None:
+        _apply_verification(zip(claims, receipts), index, verify_repo)
     return receipts
+
+
+def _apply_verification(pairs, index: ev.Index, repo: str) -> None:  # noqa: ANN001
+    """Upgrade green transcript-backed test-pass claims to BACKED-verified via re-execution.
+
+    Re-execution is memoized by evidence ref: several claims about the same green run trigger
+    one re-run, not one per claim (the command has real side effects).
+    """
+    from . import verify
+
+    ran: dict[str, verify.VerifyResult] = {}
+    for claim, receipt in pairs:
+        if (
+            receipt.verdict is not Verdict.BACKED_TRANSCRIPT
+            or claim.kind != "test-pass"
+            or claim.polarity != "positive"
+        ):
+            continue
+        run = next((r for r in index.runs if r.ref == receipt.evidence_ref), None)
+        if run is None:
+            continue
+        if not verify.is_verifiable_command(run.command):
+            receipt.notes.append("--verify: skipped (command is not a pure test-runner invocation)")
+            continue
+        result = ran.get(run.ref) or ran.setdefault(run.ref, verify.run_command(run.command, repo))
+        if result.status == "green":
+            receipt.verdict = Verdict.BACKED_VERIFIED
+            receipt.notes.append(f"--verify: re-ran in {repo} — {result.detail}")
+        else:
+            # a drifted/flaky/timed-out re-run is never a lie: keep BACKED-transcript, note why
+            receipt.notes.append(f"--verify: not upgraded ({result.status}: {result.detail})")

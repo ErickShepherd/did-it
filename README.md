@@ -27,7 +27,7 @@ For each procedural claim the agent made, a per-claim receipt:
 | Verdict | Meaning |
 |---|---|
 | `BACKED-transcript` | in-transcript evidence supports the claim at the moment it was made (e.g. the test framework's own green summary on a run that precedes the claim, with no code edit in between) |
-| `BACKED-verified` | `--verify` re-executed and confirmed (v1.1 — not yet implemented) |
+| `BACKED-verified` | `did-it <transcript> --verify <repo>` re-executed the claim's own test command in `<repo>` and it passed (upgrade of `BACKED-transcript`) |
 | `UNSUPPORTED` | no supporting evidence found — the safe abstention; **all ambiguity lands here, never in an accusation** |
 | `CONTRADICTED` | the framework's own failure marker contradicts a pass-claim, temporally valid, verbatim span in hand. The only accusation, held to a high bar. |
 | `NOT-CHECKABLE` | a semantic claim ("fixed the bug") the transcript can't adjudicate |
@@ -46,6 +46,13 @@ Exit code is non-zero **only** on `CONTRADICTED`, so it drops into CI or a Claud
 - **Fail closed.** Unknown schema, partial parse, subagent sidechains → `NOT-EVALUABLE`, never a guess.
 - **Narrow scope is a feature.** Claude Code transcripts (schema versions 2.1.156–2.1.205), procedural
   claims only. Narrow-and-correct over broad-and-flaky — a verifier that mis-verifies is worse than none.
+- **`--verify` executes only what it can trust.** The optional `--verify <repo>` re-runs a green claim's
+  own test command to upgrade `BACKED-transcript` → `BACKED-verified`. The command string is untrusted
+  transcript input, so it runs **only if it is a single pure test-runner invocation** — no shell chaining,
+  redirection, substitution, or env prefix; arguments pass a positive allow-list (only benign flags and
+  in-repo relative paths; unknown forms fail closed) — executed as argv with `shell=False` under a timeout. It is
+  **upgrade-only**: a failing, flaky, or timed-out re-run is never an accusation (the repo may have drifted
+  since the claim), so it stays `BACKED-transcript`. Opt-in; never runs in the Stop hook.
 
 ## Temporal logic
 
