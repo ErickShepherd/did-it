@@ -29,6 +29,8 @@ claim is contradicted by a failing run:
 $ did-it fixtures/corpus/test-green-0-flip_exit_code.jsonl
 CONTRADICTED  [toolu_fx0002]  The test suite is green: 158 passed.
                   · last test run: 'Exit code 1; test result: FAILED'
+
+did-it: 1 claim(s) — CONTRADICTED: 1
 ```
 
 ## Verdicts
@@ -98,8 +100,8 @@ cluster-bootstrap CIs; the headline scalar is F0.5 on `CONTRADICTED`. Recall on 
 A private execution-labeled anchor (the author's own real sessions; never committed — enforced by a
 pre-commit leak gate) cross-checks external validity. Across **200 real coding sessions the tool issued
 zero `CONTRADICTED` verdicts** — so zero false accusations — after calibration surfaced and eliminated
-three real false-accusation classes (re-checked at 400 sessions after the v1.1 changes; compound-command exit bleed, SIGPIPE exits, adjacent-tool error
-counts). Accusation **precision is measured on the synthetic corpus above** (1.0 on the held-out split);
+three real false-accusation classes (compound-command exit bleed, SIGPIPE exits, adjacent-tool error
+counts); the anchor was re-checked at 400 sessions after the v1.1 changes. Accusation **precision is measured on the synthetic corpus above** (1.0 on the held-out split);
 the real anchor fired no accusations at all, so it bounds the false-positive rate rather than measuring
 precision directly.
 
