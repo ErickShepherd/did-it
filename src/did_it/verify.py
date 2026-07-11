@@ -102,7 +102,9 @@ def is_verifiable_command(command: str) -> bool:
     expect_value = False
     for i, token in enumerate(argv):
         if expect_value:
-            if _escapes_repo(token):   # a scalar value, but never let a path escape via it
+            # a scalar value (filter/marker/int/style). Reject a path escape, and an
+            # option-looking token (`-k` swallowing a following `-p ...`) — defence in depth.
+            if token.startswith("-") or _escapes_repo(token):
                 return False
             expect_value = False
             continue

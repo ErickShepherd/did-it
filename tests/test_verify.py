@@ -87,6 +87,7 @@ class TestValidatorRejects:
             "pytest -c/tmp/evil.ini",                # glued -c bypasses =-split and denylist
             "pytest -pevilplugin",                   # glued -p plugin load
             "pytest --unknown-flag",                 # unknown flag -> fail closed (allow-list)
+            "pytest --durations -p evilplugin",      # value-flag must not swallow an option token
         ):
             assert not verify.is_verifiable_command(cmd), cmd
 
