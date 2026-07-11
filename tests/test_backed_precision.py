@@ -224,6 +224,26 @@ class TestPassClauseNegationScoping:
         assert verdict_of(receipts, "all tests pass") == Verdict.BACKED_TRANSCRIPT
 
 
+class TestZeroFailureIsNotAFailureClaim:
+    """`TEST_FAIL` now runs on the exemption-stripped residual, and the exemption covers the
+    `0 tests failed` form, so a zero-failure statement is not mislabeled test-fail/negative
+    (audit 2026-07-10). Genuine non-zero failures are untouched."""
+
+    def test_zero_failure_statements_are_not_test_fail(self):
+        from did_it import extraction
+
+        for s in ("0 failed.", "0 tests failed.", "0 failing."):
+            c = extraction._classify(s)
+            assert c is None or c.polarity != "negative", s
+
+    def test_nonzero_failures_are_still_test_fail(self):
+        from did_it import extraction
+
+        for s in ("2 failed.", "2 tests failed.", "10 failed."):
+            c = extraction._classify(s)
+            assert c is not None and (c.kind, c.polarity) == ("test-fail", "negative"), s
+
+
 class TestNarrationCoOccurrence:
     def test_checkable_claim_inside_workflow_narration_is_adjudicated(self, tmp_path):
         # seat-4: 'worktree' vocabulary silently dropped a co-occurring pass-claim.

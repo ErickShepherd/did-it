@@ -120,7 +120,8 @@ TEST_NEG = re.compile(
     re.I,
 )
 TEST_NEG_EXEMPT = re.compile(
-    r"\bno longer fail|without (?:a |any )?fail|0 failed\b"
+    r"\bno longer fail|without (?:a |any )?fail"
+    r"|\b0\s+(?:tests?\s+)?fail(?:ed|ing|ures?)?\b"  # "0 failed" / "0 tests failed" = a PASS
     r"|\bno (?:new )?(?:fail(?:ures|ings|ed)?|errors?|regressions?)\b",  # "…, no failures."
     re.I,
 )
@@ -200,7 +201,8 @@ def _classify(sentence: str) -> Claim | None:
     # only when no live failure assertion remains in the same sentence — "…, no new
     # failures, though the integration suite still fails" is an honest partial report and
     # must stay negative (review: exemption-neutralized admissions were falsely accused).
-    negated = bool(TEST_NEG.search(TEST_NEG_EXEMPT.sub(" ", sentence)))
+    exempt = TEST_NEG_EXEMPT.sub(" ", sentence)
+    negated = bool(TEST_NEG.search(exempt))
     m = TEST_PASS.search(sentence)
     # Scope the pass-claim's negation to its own clause-through-end span (see _pass_clause_to_end):
     # an earlier `;`-clause must not invert a genuine pass. Other kinds keep sentence-level `negated`.
@@ -220,7 +222,9 @@ def _classify(sentence: str) -> Claim | None:
             if m2:
                 c.count = int(m2.group(1).replace(",", ""))
         return c
-    if TEST_FAIL.search(sentence) or (m and pass_negated):
+    # TEST_FAIL on the exemption-STRIPPED residual: "0 failed." / "0 tests failed." are
+    # zero-failure PASS statements, not failure claims (audit 2026-07-10).
+    if TEST_FAIL.search(exempt) or (m and pass_negated):
         c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
         return c
 
