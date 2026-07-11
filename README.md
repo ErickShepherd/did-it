@@ -9,6 +9,8 @@
   <a href="https://github.com/ErickShepherd/did-it/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ErickShepherd/did-it/actions/workflows/ci.yml/badge.svg"></a>
 </p>
 
+> *did it? did it **really**?*
+
 Mechanically check whether an AI coding agent's natural-language claims — "I ran the tests and they
 pass", "I created the file", "the suite is green" — match what its **Claude Code session actually did**,
 as recorded in the transcript.
