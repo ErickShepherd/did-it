@@ -32,7 +32,7 @@ MARKER = "FIXTURES_ONLY"
 #: blank lines ignored). This module supplies only the MECHANISM; the owner supplies the content.
 #: Absent file -> no extra patterns (the check is a no-op until names are provided). Matching is
 #: substring + case-insensitive: any occurrence of a private name flags the file, the
-#: privacy-conservative choice (the owner tunes the list). Added by the audit loop 2026-07-10.
+#: privacy-conservative choice (the owner tunes the list).
 LOCAL_NAMES_FILE = Path(__file__).with_name(".leakgate-names.local")
 
 

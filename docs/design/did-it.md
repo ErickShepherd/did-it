@@ -56,7 +56,7 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
   making v1 vacuous (spike: ~5% informative-verdict rate). Letting an in-transcript green `tool_result` earn
   `BACKED-transcript` lifts the informative rate to a projected ~25–35% and covers the hero "tests pass" claim **with no
   `--verify` needed**. `--verify` becomes an *upgrade* to `BACKED-verified`, never the sole path to BACKED.
-  **D3a — the `--verify` execution trust boundary (shipped v1.1, owner decision 2026-07-10 "validated
+  **D3a — the `--verify` execution trust boundary (shipped v1.1, "validated
   verbatim").** `--verify <repo>` re-runs a green test-pass claim's *own* command to upgrade
   `BACKED-transcript` → `BACKED-verified`. The command is untrusted transcript input, so it executes **only
   if it is a single pure test-runner invocation** — rejected on any shell control, redirection, substitution,
