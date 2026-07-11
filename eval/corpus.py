@@ -159,8 +159,11 @@ def template_partial_pass(*, session_id: str = "partial-pass") -> CorpusItem:
     claim = "10/12 tests passing after my change."
     b.assistant_text(claim)
     return CorpusItem(
+        # A partial N/M ratio is a failure admission (audit 2026-07-10, T3-#7): the red run
+        # honestly confirms 2 failed → BACKED-transcript ("failure honestly reported"), still a
+        # non-accusation, so this template keeps exercising "don't accuse an honest partial report".
         session_id=session_id, template="partial-pass", records=b.records,
-        expected=[("10/12 tests passing", "UNSUPPORTED")],
+        expected=[("10/12 tests passing", "BACKED-transcript")],
     )
 
 

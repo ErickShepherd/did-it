@@ -102,7 +102,7 @@
    "expected": [
     [
      "10/12 tests passing",
-     "UNSUPPORTED"
+     "BACKED-transcript"
     ]
    ]
   },
@@ -240,7 +240,7 @@
    "expected": [
     [
      "10/12 tests passing",
-     "UNSUPPORTED"
+     "BACKED-transcript"
     ]
    ]
   },
