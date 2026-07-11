@@ -9,35 +9,45 @@ Deps: fonttools.  Usage:
   build_lockup.py --text excubitor --font sora-600.ttf --mark excubitor.svg \
                   --field '#2E3A4E' --structure '#F4F1E8' --out-prefix excubitor
 """
-import argparse, re
+import argparse
+import re
+
 from fontTools.ttLib import TTFont
 from fontTools.pens.svgPathPen import SVGPathPen
 from fontTools.pens.boundsPen import BoundsPen
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--text", required=True); ap.add_argument("--font", required=True)
+ap.add_argument("--text", required=True)
+ap.add_argument("--font", required=True)
 ap.add_argument("--mark", required=True, help="the full-colour mark SVG to sit left of the word")
-ap.add_argument("--field", required=True); ap.add_argument("--structure", required=True)
+ap.add_argument("--field", required=True)
+ap.add_argument("--structure", required=True)
 ap.add_argument("--out-prefix", required=True)
 ap.add_argument("--track", type=int, default=12, help="letter-spacing, font units")
 ap.add_argument("--word-cap-frac", type=float, default=0.50, help="word cap-height as fraction of mark height")
 a = ap.parse_args()
 
 f = TTFont(a.font)
-cmap = f.getBestCmap(); gs = f.getGlyphSet(); hmtx = f["hmtx"]
+cmap = f.getBestCmap()
+gs = f.getGlyphSet()
+hmtx = f["hmtx"]
 CAP = getattr(f.get("OS/2"), "sCapHeight", 0) or int(0.7 * f["head"].unitsPerEm)
 
 # lay out glyphs; collect outline paths + a tight ink bbox
 paths, x = [], 0
-xmin = ymin = 1e9; xmax = ymax = -1e9
+xmin = ymin = 1e9
+xmax = ymax = -1e9
 for ch in a.text:
     gname = cmap.get(ord(ch))
     if gname is None:
         raise SystemExit(f"font has no glyph for {ch!r}")
-    pen = SVGPathPen(gs); gs[gname].draw(pen); d = pen.getCommands()
+    pen = SVGPathPen(gs)
+    gs[gname].draw(pen)
+    d = pen.getCommands()
     if d:
         paths.append(f'<path transform="translate({x},0)" d="{d}"/>')
-        bp = BoundsPen(gs); gs[gname].draw(bp)
+        bp = BoundsPen(gs)
+        gs[gname].draw(bp)
         if bp.bounds:
             gx0, gy0, gx1, gy1 = bp.bounds
             xmin, ymin = min(xmin, x + gx0), min(ymin, gy0)
