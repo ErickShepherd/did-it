@@ -50,6 +50,12 @@ class TestValidatorRejects:
         ):
             assert not verify.is_verifiable_command(cmd), cmd
 
+    def test_rejects_embedded_nul(self):
+        # A NUL byte was absent from _UNSAFE, so it passed the gate then crashed subprocess
+        # with an uncaught ValueError (audit 2026-07-10). It must fail the gate outright.
+        for cmd in ("pytest\x00 -q", "pytest\x00-q", "\x00pytest", "pytest -q\x00"):
+            assert not verify.is_verifiable_command(cmd), repr(cmd)
+
     def test_rejects_non_runner_and_non_executing(self):
         for cmd in ("echo pytest passed", "pip install pytest", "cat results.txt",
                     "pytest --version", "ls -la"):
@@ -129,6 +135,15 @@ class TestExecutorAggregation:
     def test_timeout_is_errored(self, monkeypatch):
         def boom(argv, **kw):
             raise verify.subprocess.TimeoutExpired(argv, kw.get("timeout"))
+        monkeypatch.setattr(verify.subprocess, "run", boom)
+        assert verify.run_command("pytest -q", "/repo", runs=2).status == "errored"
+
+    def test_subprocess_valueerror_is_errored_not_raised(self, monkeypatch):
+        # Belt-and-suspenders for the "Never raises" contract: even if some argv reaches
+        # subprocess and it raises ValueError (e.g. "embedded null byte"), run_command must
+        # return errored, never propagate (audit 2026-07-10).
+        def boom(argv, **kw):
+            raise ValueError("embedded null byte")
         monkeypatch.setattr(verify.subprocess, "run", boom)
         assert verify.run_command("pytest -q", "/repo", runs=2).status == "errored"
 

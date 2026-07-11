@@ -29,7 +29,7 @@ from . import evidence as ev
 
 #: Shell metacharacters that enable chaining / redirection / substitution / grouping. Their
 #: mere presence disqualifies the command — we do not try to sanitize, we refuse.
-_UNSAFE = re.compile(r"[;|&<>$`(){}\n\r\\]")
+_UNSAFE = re.compile(r"[;|&<>$`(){}\n\r\\\x00]")  # \x00: NUL passed the gate then crashed subprocess (audit 2026-07-10)
 #: A leading `NAME=value` env assignment (argv[0] would be the assignment, not the runner).
 _ENV_PREFIX = re.compile(r"^\s*\w+=")
 _MAX_LEN = 4096
@@ -143,7 +143,10 @@ def run_command(command: str, cwd: str, *, runs: int = _DEFAULT_RUNS,
             cp = subprocess.run(  # noqa: S603 — argv, shell=False, validated; the trust boundary
                 argv, cwd=cwd, shell=False, capture_output=True, text=True, timeout=timeout,
             )
-        except (subprocess.TimeoutExpired, OSError) as e:
+        except (subprocess.TimeoutExpired, OSError, ValueError) as e:
+            # ValueError: subprocess raises "embedded null byte" for a NUL in argv. The gate
+            # now rejects NUL (_UNSAFE), so this is belt-and-suspenders for the documented
+            # "Never raises" contract — any argv the OS rejects errors, never propagates.
             return VerifyResult("errored", type(e).__name__)
         output = (cp.stdout or "") + (f"\n{cp.stderr}" if cp.stderr else "")
         run = ev.Run(index=0, command=command, exit_code=cp.returncode,
