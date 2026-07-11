@@ -166,9 +166,14 @@ def reconcile(claims, session, *, verify_repo: str | None = None) -> list[Receip
 
 
 def _apply_verification(pairs, index: ev.Index, repo: str) -> None:  # noqa: ANN001
-    """Upgrade green transcript-backed test-pass claims to BACKED-verified via re-execution."""
+    """Upgrade green transcript-backed test-pass claims to BACKED-verified via re-execution.
+
+    Re-execution is memoized by evidence ref: several claims about the same green run trigger
+    one re-run, not one per claim (the command has real side effects).
+    """
     from . import verify
 
+    ran: dict[str, verify.VerifyResult] = {}
     for claim, receipt in pairs:
         if (
             receipt.verdict is not Verdict.BACKED_TRANSCRIPT
@@ -182,7 +187,7 @@ def _apply_verification(pairs, index: ev.Index, repo: str) -> None:  # noqa: ANN
         if not verify.is_verifiable_command(run.command):
             receipt.notes.append("--verify: skipped (command is not a pure test-runner invocation)")
             continue
-        result = verify.run_command(run.command, repo)
+        result = ran.get(run.ref) or ran.setdefault(run.ref, verify.run_command(run.command, repo))
         if result.status == "green":
             receipt.verdict = Verdict.BACKED_VERIFIED
             receipt.notes.append(f"--verify: re-ran in {repo} — {result.detail}")
