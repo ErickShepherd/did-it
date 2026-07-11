@@ -189,7 +189,13 @@ def _apply_verification(pairs, index: ev.Index, repo: str) -> None:  # noqa: ANN
         if not verify.is_verifiable_command(run.command):
             receipt.notes.append("--verify: skipped (command is not a pure test-runner invocation)")
             continue
-        result = ran.get(run.ref) or ran.setdefault(run.ref, verify.run_command(run.command, repo))
+        # Memoize by ref explicitly (not `get() or setdefault(...)`): the command has real side
+        # effects and must run at most once per ref. The old form relied on VerifyResult being
+        # truthy AND still eagerly evaluated run_command inside setdefault even when cached — a
+        # falsy result would re-run it (audit 2026-07-10).
+        if run.ref not in ran:
+            ran[run.ref] = verify.run_command(run.command, repo)
+        result = ran[run.ref]
         if result.status == "green":
             receipt.verdict = Verdict.BACKED_VERIFIED
             receipt.notes.append(f"--verify: re-ran in {repo} — {result.detail}")

@@ -192,6 +192,25 @@ class TestReconcileUpgradeWiring:
         r = verdict_of(did_it.check(self._session(tmp_path), verify_repo="/repo"), "12 tests pass")
         assert r.verdict == Verdict.BACKED_VERIFIED
 
+    def test_reexecution_memoized_once_per_ref_even_if_result_is_falsy(self, tmp_path, monkeypatch):
+        # Two test-pass claims about the SAME green run must trigger ONE re-run — the memo keys
+        # on ref, not VerifyResult truthiness, and must not eagerly re-run inside setdefault
+        # (audit 2026-07-10). Force a falsy VerifyResult to expose the old `get() or setdefault`.
+        calls = {"n": 0}
+
+        def fake_run(*_a, **_k):
+            calls["n"] += 1
+            return verify.VerifyResult("green", "1/1 green")
+
+        monkeypatch.setattr(verify, "run_command", fake_run)
+        monkeypatch.setattr(verify.VerifyResult, "__bool__", lambda self: False, raising=False)
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("All 12 tests pass. The suite is green.")  # two claims, one run
+        did_it.check(b.write_jsonl(tmp_path / "t.jsonl"), verify_repo="/repo")
+        assert calls["n"] == 1
+
     def test_red_reverify_never_downgrades_to_contradicted(self, tmp_path, monkeypatch):
         monkeypatch.setattr(verify, "run_command",
                             lambda *a, **k: verify.VerifyResult("red", "failed on re-run"))
