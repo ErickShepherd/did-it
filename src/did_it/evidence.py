@@ -427,7 +427,14 @@ _FAMILY_PATTERNS = dict(_FAMILIES)
 _TARGET_FILE_TOKEN = re.compile(r"(\S{1,500}\.(?:py|rs|go|ts|tsx|js|jsx|rb|java|cc?|cpp))(?:::(\S{1,500}))?$")
 #: pytest -k/-m (separated OR glued: `-kfoo`), go test -run. Bare-word cargo/go name
 #: filters (`cargo test my_test`) are NOT recognized — known limitation, noted in D4a.
-_TARGET_SELECT = re.compile(r"\s-(?:k|m|run)[= ]{0,8}(['\"]?)([\w~<>=. -]{1,256})\1")
+#: The value stops at whitespace / the next flag when UNQUOTED (`bare`): the old class allowed a
+#: space, so `-k foo --verbose` swallowed `--verbose` and captured `verbose` as a bogus target
+#: (audit 2026-07-10). A QUOTED value keeps spaces (`-k "foo or bar"`) — dropping that support
+#: would stop recognizing a real targeted run and could un-suppress a false accusation.
+_TARGET_SELECT = re.compile(
+    r"\s-(?:k|m|run)[= ]{0,8}"
+    r"(?:(['\"])(?P<quoted>[^'\"\n]{1,256})\1|(?P<bare>[\w~<>=.]{1,256}))"
+)
 _SELECT_SCAN_CAP = 4096
 _SELECT_STRADDLE = 16  # overlap window so a flag straddling the cap is still seen
 _TOKEN_LENGTH_CAP = 512
@@ -482,7 +489,7 @@ def target_tokens(command: str) -> set[str]:
         # appear in almost any claim, which would read as naming the target and
         # un-suppress the accusation (false CONTRADICTED — review round 3).
         out.update(
-            w for w in re.findall(r"\w+", sel.group(2))
+            w for w in re.findall(r"\w+", sel.group("quoted") or sel.group("bare") or "")
             if len(w) >= 3 and w.lower() not in _GENERIC_TOKENS
         )
     tail = args[max(0, _SELECT_SCAN_CAP - _SELECT_STRADDLE):]

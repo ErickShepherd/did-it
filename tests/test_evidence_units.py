@@ -8,9 +8,25 @@ from __future__ import annotations
 
 import did_it
 from did_it.verdicts import Verdict
-from did_it.evidence import is_test_command
+from did_it.evidence import is_test_command, target_tokens
 
 from did_it.testing import SessionBuilder
+
+
+class TestTargetTokens:
+    """A -k/-m/-run selector value stops at whitespace/next flag when unquoted, but keeps spaces
+    when quoted (audit 2026-07-10). An unrelated trailing flag must not become a bogus target."""
+
+    def test_unquoted_value_stops_before_next_flag(self):
+        assert target_tokens("pytest -k foo --verbose") == {"foo"}     # not {"foo", "verbose"}
+        assert target_tokens("go test -run TestFoo -v") == {"TestFoo"}  # not {"TestFoo"} + "v"
+
+    def test_quoted_value_keeps_its_spaces(self):
+        assert target_tokens('pytest -k "foo or bar" -x') == {"foo", "bar"}
+
+    def test_glued_and_suite_level(self):
+        assert target_tokens("pytest -kfoo") == {"foo"}
+        assert target_tokens("pytest -q") == set()
 
 
 class TestIsTestCommand:
