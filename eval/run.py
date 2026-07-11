@@ -66,42 +66,69 @@ def score_item(item: corpus.CorpusItem, receipts: list) -> dict:
     }
 
 
+# Ratio-of-sums statistics over a set of session rows. Each is None when undefined (an empty
+# denominator) — never a fabricated perfect score (panel C8) — so the bootstrap CI is None too.
+def _precision(rs: list[dict]) -> float | None:
+    tp = sum(r["true_contradicted"] for r in rs)
+    fp = sum(r["false_contradicted"] for r in rs)
+    return tp / (tp + fp) if tp + fp else None
+
+
+def _recall(rs: list[dict]) -> float | None:
+    tp = sum(r["true_contradicted"] for r in rs)
+    fn = sum(r["expected_contradicted"] - r["true_contradicted"] for r in rs)
+    return tp / (tp + fn) if tp + fn else None
+
+
+def _f05(rs: list[dict]) -> float | None:
+    p, r = _precision(rs), _recall(rs)
+    return metrics.f_beta(p, r, 0.5) if p is not None and r is not None else None
+
+
+def _fake_pass_rate(rs: list[dict]) -> float | None:
+    fake = [r for r in rs if r["operator"] == "flip_exit_code"]
+    return sum(1 for r in fake if r["true_contradicted"] > 0) / len(fake) if fake else None
+
+
+def _backed_rate(rs: list[dict]) -> float | None:
+    green = [r for r in rs if r["template"] == "green-run" and r["operator"] is None]
+    return sum(1 for r in green if r["got"].get("BACKED-transcript", 0) > 0) / len(green) if green else None
+
+
+def _ci(rows: list[dict], statistic) -> list[float] | None:
+    """Ratio-of-sums cluster-bootstrap CI as a JSON-friendly [lo, hi], or None if undefined."""
+    result = metrics.cluster_bootstrap_ratio_ci(rows, statistic, iters=2000)
+    return [result[0], result[1]] if result is not None else None
+
+
 def report(rows: list[dict]) -> dict:
     if not rows:
         return {"sessions": 0, "note": "empty split — no metrics computed"}
-    tp = sum(r["true_contradicted"] for r in rows)
-    fp = sum(r["false_contradicted"] for r in rows)
-    fn = sum(r["expected_contradicted"] - r["true_contradicted"] for r in rows)
-    # undefined is None, never a fabricated perfect score (panel C8)
-    precision = tp / (tp + fp) if tp + fp else None
-    recall = tp / (tp + fn) if tp + fn else None
 
     fake = [r for r in rows if r["operator"] == "flip_exit_code"]
-    fake_caught = sum(1 for r in fake if r["true_contradicted"] > 0)
-
     green = [r for r in rows if r["template"] == "green-run" and r["operator"] is None]
-    green_backed = sum(1 for r in green if r["got"].get("BACKED-transcript", 0) > 0)
-
-    fa_values = [1.0 if r["false_contradicted"] else 0.0 for r in rows]
-    fa_groups = [r["session"] for r in rows]
     fa_rate = metrics.per_session_false_accusation_rate(rows)
     fa_lo, fa_hi = metrics.cluster_bootstrap_ci(
-        fa_values, fa_groups, statistic=lambda v: sum(v) / len(v), iters=2000
+        [1.0 if r["false_contradicted"] else 0.0 for r in rows],
+        [r["session"] for r in rows], statistic=lambda v: sum(v) / len(v), iters=2000,
     )
 
+    # Every headline bar now carries a cluster-bootstrap CI (docstring promise); point estimates
+    # are unchanged, the CI is added alongside as ci95.
     return {
         "sessions": len(rows),
         "label_match_rate": sum(r["matched"] for r in rows) / max(sum(r["labels"] for r in rows), 1),
         "contradicted": {
-            "precision": precision,
-            "recall": recall,
-            "f0.5": (metrics.f_beta(precision, recall, 0.5)
-                     if precision is not None and recall is not None else None),
+            "precision": _precision(rows), "precision_ci95": _ci(rows, _precision),
+            "recall": _recall(rows), "recall_ci95": _ci(rows, _recall),
+            "f0.5": _f05(rows), "f0.5_ci95": _ci(rows, _f05),
         },
-        "fake_pass_catch": {"caught": fake_caught, "of": len(fake),
-                            "rate": fake_caught / len(fake) if fake else None},
-        "backed_coverage_green_runs": {"backed": green_backed, "of": len(green),
-                                       "rate": green_backed / len(green) if green else None},
+        "fake_pass_catch": {"caught": sum(1 for r in fake if r["true_contradicted"] > 0),
+                            "of": len(fake), "rate": _fake_pass_rate(rows),
+                            "ci95": _ci(rows, _fake_pass_rate)},
+        "backed_coverage_green_runs": {"backed": sum(1 for r in green if r["got"].get("BACKED-transcript", 0) > 0),
+                                       "of": len(green), "rate": _backed_rate(rows),
+                                       "ci95": _ci(rows, _backed_rate)},
         "per_session_false_accusation": {"rate": fa_rate, "ci95": [fa_lo, fa_hi]},
     }
 

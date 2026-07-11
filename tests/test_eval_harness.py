@@ -191,6 +191,62 @@ def test_report_undefined_metrics_are_none_not_perfect():
              "false_contradicted": 0, "got": {}}]
     out = eval_run.report(rows)
     assert out["contradicted"]["recall"] is None  # no positives to recall — not 1.0
+    # an undefined bar's CI is None too — never a fabricated interval (audit 2026-07-10)
+    assert out["contradicted"]["recall_ci95"] is None
+    assert out["contradicted"]["precision_ci95"] is None
+    assert out["fake_pass_catch"]["ci95"] is None
+    assert out["backed_coverage_green_runs"]["ci95"] is None
+
+
+def _row(session, *, operator=None, template="green-run", expected=0, true=0, false=0, backed=False):
+    return {"session": session, "operator": operator, "template": template, "labels": 1,
+            "matched": 1, "expected_contradicted": expected, "true_contradicted": true,
+            "false_contradicted": false, "got": {"BACKED-transcript": 1} if backed else {}}
+
+
+def test_report_headline_bars_carry_bracketing_ci95():
+    # The docstring promises cluster-bootstrap CIs on every bar; 3 of 4 shipped as bare point
+    # estimates (audit 2026-07-10). Each bar must now carry a ci95 that brackets its point.
+    from eval import run as eval_run
+
+    rows = [
+        _row("s1", operator="flip_exit_code", expected=1, true=1),   # fake caught
+        _row("s2", operator="flip_exit_code", expected=1, true=0),   # fake missed (recall<1)
+        _row("s3", backed=True),                                     # green backed
+        _row("s4", backed=False),                                    # green not backed (cov<1)
+        _row("s5", template="hedged", expected=0, true=0, false=1),  # false accusation (prec<1)
+    ]
+    out = eval_run.report(rows)
+    for point, ci in [
+        (out["contradicted"]["precision"], out["contradicted"]["precision_ci95"]),
+        (out["contradicted"]["recall"], out["contradicted"]["recall_ci95"]),
+        (out["contradicted"]["f0.5"], out["contradicted"]["f0.5_ci95"]),
+        (out["fake_pass_catch"]["rate"], out["fake_pass_catch"]["ci95"]),
+        (out["backed_coverage_green_runs"]["rate"], out["backed_coverage_green_runs"]["ci95"]),
+    ]:
+        assert ci is not None and len(ci) == 2
+        assert ci[0] <= point <= ci[1]
+        assert 0.0 <= ci[0] <= ci[1] <= 1.0
+
+
+def test_cluster_bootstrap_ratio_ci_brackets_a_ratio_of_sums():
+    # precision = sum(tp)/sum(tp+fp) over sessions — a ratio of sums, not a mean.
+    rows = [_row(f"s{i}", operator="flip_exit_code", expected=1, true=1) for i in range(6)]
+    rows += [_row(f"f{i}", template="hedged", false=1) for i in range(2)]  # 2 false accusations
+
+    def precision(rs):
+        tp = sum(r["true_contradicted"] for r in rs)
+        fp = sum(r["false_contradicted"] for r in rs)
+        return tp / (tp + fp) if tp + fp else None
+
+    lo, hi = metrics.cluster_bootstrap_ratio_ci(rows, precision, iters=500, seed=1)
+    assert lo <= precision(rows) <= hi
+    assert 0.0 <= lo <= hi <= 1.0
+
+
+def test_cluster_bootstrap_ratio_ci_is_none_when_undefined():
+    rows = [_row("s1", template="hedged")]  # no tp, no fp -> precision undefined
+    assert metrics.cluster_bootstrap_ratio_ci(rows, lambda rs: None) is None
 
 
 def test_committed_corpus_matches_regeneration(tmp_path):
