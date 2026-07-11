@@ -285,6 +285,22 @@ class TestConflictingSummaries:
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
 
+    def test_conflicting_summaries_under_a_masked_exit_do_not_endorse(self, tmp_path):
+        # Review round 1: the conflict guard sets framework_failed=False, which also disabled
+        # the C7 masked-exit guard — so a `... || true` run with a green AND a failed summary
+        # fell through to the exit-0 green branch and endorsed a fake pass. A conflict must be
+        # ambiguous in BOTH exit directions: never CONTRADICTED, and never BACKED.
+        b = SessionBuilder()
+        b.user_text("run both suites")
+        b.bash(
+            "pytest tests/a -q && pytest tests/b -q || true",
+            "3 passed in 0.10s\n=== 2 failed, 8 passed in 0.40s ===\n",
+            exit_code=0,  # masked
+        )
+        b.assistant_text("All tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
 
 class TestPathologicalOutput:
     def test_huge_near_match_single_line_adjudicates_quickly(self, tmp_path):

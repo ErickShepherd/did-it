@@ -360,6 +360,12 @@ def classify_outcome(run: Run) -> tuple[str, str | None]:
     masked exit (`pytest || true`) beside a visible red summary endorsed a fake pass-claim
     (panel C7). Never an accusation either way — D4 requires a non-zero exit.
     """
+    if run._summaries_conflict(run._summary_lines()):
+        # Conflicting framework summaries (a green-only AND a separate failure-only line) are
+        # untrustworthy in EITHER exit direction: framework_failed abstains to False on a
+        # conflict, so without this a masked exit (`... || true`) would fall through to the
+        # exit-0 green branch and endorse a fake pass (audit 2026-07-10 review). Abstain.
+        return "ambiguous", "conflicting framework summaries; outcome not trustworthy"
     if run.exit_code == 0 and run.framework_failed:
         return "ambiguous", "exit 0 but the framework summary reports failures"
     if run.exit_code == 0 or run.framework_green:
