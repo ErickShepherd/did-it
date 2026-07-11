@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "did-it"
+abstract: >-
+  Mechanically check whether an AI coding agent's natural-language
+  claims - "I ran the tests and they pass", "I created the file",
+  "the suite is green" - match what its Claude Code session actually
+  did, as recorded in the transcript. Turns manual after-the-fact
+  verification of agent work into a single deterministic command.
+type: software
+authors:
+  - family-names: "Shepherd"
+    given-names: "Erick Edward"
+    email: "dev@erickshepherd.com"
+    orcid: "https://orcid.org/0000-0002-4750-6100"
+version: "0.1.0"
+date-released: "2026-07-11"
+license: MIT
+repository-code: "https://github.com/ErickShepherd/did-it"
+url: "https://github.com/ErickShepherd/did-it"
+keywords:
+  - ai-agents
+  - evaluation
+  - reliability
+  - claude-code
+  - hallucination
+  - verification
+  - python

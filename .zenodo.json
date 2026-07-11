@@ -1,0 +1,22 @@
+{
+  "upload_type": "software",
+  "title": "did-it: Mechanically verify an AI coding agent's claims against what its Claude Code session actually did",
+  "description": "A stdlib-only Python tool that checks whether an AI coding agent's natural-language claims - \"I ran the tests and they pass\", \"I created the file\", \"the suite is green\" - match what its Claude Code session actually did, as recorded in the transcript. Turns manual after-the-fact verification of agent work into a single deterministic command.",
+  "access_right": "open",
+  "license": "MIT",
+  "keywords": [
+    "ai-agents",
+    "evaluation",
+    "reliability",
+    "claude-code",
+    "hallucination",
+    "verification",
+    "python"
+  ],
+  "creators": [
+    {
+      "name": "Shepherd, Erick Edward",
+      "orcid": "0000-0002-4750-6100"
+    }
+  ]
+}
