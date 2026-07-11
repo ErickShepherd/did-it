@@ -344,6 +344,19 @@ class TestPathologicalCommands:
         assert time.monotonic() - t0 < 2.0
         assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
 
+    def test_single_heredoc_opener_with_huge_word_adjudicates_quickly(self, tmp_path):
+        # A SINGLE `<<` opener followed by a long unbroken word with no terminator made the
+        # HEREDOC delimiter capture `(\w+)` backtrack quadratically (3.6s at 40KB -> hours at
+        # 1MB). The opener-COUNT cap missed it (only one opener); the delimiter length gate
+        # fixes it (audit 2026-07-10).
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest <<" + "A" * 100_000, "1 failed in 0.30s", exit_code=1)
+        b.assistant_text("All tests pass.")
+        t0 = time.monotonic()
+        did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert time.monotonic() - t0 < 2.0
+
 
 class TestOperatorFloodCommands:
     def test_chain_operator_flood_adjudicates_quickly_and_abstains(self, tmp_path):

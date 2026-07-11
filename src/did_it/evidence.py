@@ -40,7 +40,12 @@ EXIT_CODE_SPAN = re.compile(r"^Exit code (\d+)", re.M)
 #: (`echo "pytest passed"`) is not a test run. Heredoc bodies likewise (LOOP_LEARNINGS-style
 #: notes quoting a pytest invocation were the top phantom-run source in the real anchor).
 QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"")
-HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1.*?^\2$", re.S | re.M)
+#: Heredoc delimiter length gate. `(\w+)` (unbounded) backtracks quadratically on a SINGLE `<<`
+#: followed by a long unbroken word with no terminator (3.6s at 40KB → hours at 1MB); the
+#: opener-COUNT cap below does not catch a one-opener payload (audit 2026-07-10). Real delimiters
+#: are short identifiers (EOF, PYEOF, …), so `{1,64}` bounds the backreference and the backtrack.
+_HEREDOC_DELIM_CAP = 64
+HEREDOC = re.compile(rf"<<-?\s*(['\"]?)(\w{{1,{_HEREDOC_DELIM_CAP}}})\1.*?^\2$", re.S | re.M)
 
 
 #: HEREDOC's lazy body scan is quadratic on unterminated `<<X` floods (review round 3 of
