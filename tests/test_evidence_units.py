@@ -220,3 +220,24 @@ class TestAssertivenessRecall:
                   'He said "this will never work" about the plan.',
                   "Committing the changes now."):
             assert self._classify(s) is False, s
+
+
+class TestFileCreatedPrepositionBoundary:
+    """FILE_CREATED's gap must not cross a preposition: "created a helper to update config.py"
+    is about the helper, not config.py (audit 2026-07-10). File-created never accuses, so this
+    is a misses-only precision fix."""
+
+    def _classify(self, s):
+        from did_it import extraction
+        return extraction._classify(s)
+
+    def test_path_after_preposition_is_not_the_created_object(self):
+        c = self._classify("created a helper to update config.py")
+        assert c is None or c.kind != "file-created"
+
+    def test_direct_object_path_still_binds(self):
+        for s, path in [("created config.py", "config.py"),
+                        ("added tests/test_foo.py", "tests/test_foo.py"),
+                        ("Wrote docs/notes.md with the release steps.", "docs/notes.md")]:
+            c = self._classify(s)
+            assert c is not None and c.kind == "file-created" and c.tokens[0] == path, s

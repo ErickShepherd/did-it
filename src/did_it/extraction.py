@@ -173,7 +173,11 @@ EXIT_CODE = re.compile(
 
 #: Past forms only: base-form "write X" / "add X" is future intent, not an accomplished fact.
 FILE_CREATED = re.compile(
-    r"\b(?:created|added|wrote|written|generated|saved)\b[^.;]*?"
+    # The gap between the verb and the path may NOT cross a preposition: "created a helper to
+    # update config.py" is about the helper, not config.py (audit 2026-07-10). Tempered scan
+    # stops before to/for/from/into/in/with/of/on/at/by, so the path must be the verb's own object.
+    r"\b(?:created|added|wrote|written|generated|saved)\b"
+    r"(?:(?!\b(?:to|for|from|into|in|with|of|on|at|by)\b)[^.;])*?"
     r"(?P<path>[\w./-]+\.[A-Za-z]{1,8})",
     re.I,
 )
