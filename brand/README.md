@@ -44,8 +44,8 @@ python3 trace_logo.py did-it-source.png did-it.svg \
 curl -sL -o sora-var.ttf "https://raw.githubusercontent.com/google/fonts/main/ofl/sora/Sora%5Bwght%5D.ttf"
 python3 -c "from fontTools import ttLib; from fontTools.varLib.instancer import instantiateVariableFont as I; f=ttLib.TTFont('sora-var.ttf'); I(f,{'wght':600},inplace=True); f.save('sora-600.ttf')"
 
-# wordmark + light/dark lockups
-python3 build_lockup.py --text did-it --font sora-600.ttf --mark did-it.svg \
+# wordmark + light/dark lockups  (the wordmark reads "did-it?" — the question the tool answers)
+python3 build_lockup.py --text 'did-it?' --font sora-600.ttf --mark did-it.svg \
     --field '#10403B' --structure '#F2EFE6' --out-prefix did-it
 ```
 
