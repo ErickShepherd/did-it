@@ -151,6 +151,20 @@ class Run:
     def _summary_lines(self) -> list[str]:
         return [line for line in self.output.splitlines() if _is_summary_line(line)]
 
+    @staticmethod
+    def _summaries_conflict(lines: list[str]) -> bool:
+        """A genuinely-green summary line AND a SEPARATE failure-summary line coexist.
+
+        The two framework summaries disagree, so neither can be trusted as THE outcome of
+        this run — the canonical case is an echoed/cat'd stale CI log's `N failed … in Ns`
+        summary sitting beside a real green summary. Abstain: never accuse, never assert
+        backed (audit 2026-07-10 — the #1 false-CONTRADICTED path). A single mixed line
+        (`5 failed, 3 passed in 12.01s`) is a genuine partial failure, not a conflict: it
+        carries no green-*only* summary line, so it still reads as framework_failed."""
+        green = any(_PASSED_COUNT.search(ln) and not _FAILED_COUNT.search(ln) for ln in lines)
+        failed = any(_FAILED_COUNT.search(ln) for ln in lines)
+        return green and failed
+
     @property
     def framework_failed(self) -> bool:
         """The test framework's own summary reported failures/errors.
@@ -158,19 +172,22 @@ class Run:
         Per-test FAILED/ERROR lines count only when the output carries NO summary line at
         all (a truncated run). Next to a genuine summary they may be echoed content — a
         cat'd CI log's stale FAILED line beside a green summary produced a false
-        accusation (panel 2026-07-10, C2)."""
+        accusation (panel 2026-07-10, C2). Conflicting summaries (a green summary line AND a
+        separate failure-summary line) are ambiguous, never a failure marker (audit 2026-07-10)."""
         lines = self._summary_lines()
         if lines:
+            if self._summaries_conflict(lines):
+                return False
             return any(_FAILED_COUNT.search(line) for line in lines)
         return bool(FAILED_LINE.search(self.output))
 
     @property
     def framework_green(self) -> bool:
         """The test framework's own summary reported passes and no failures."""
-        return (
-            any(_PASSED_COUNT.search(line) for line in self._summary_lines())
-            and not self.framework_failed
-        )
+        lines = self._summary_lines()
+        if self._summaries_conflict(lines):
+            return False  # conflicting summaries → ambiguous, not backed (audit 2026-07-10)
+        return any(_PASSED_COUNT.search(line) for line in lines) and not self.framework_failed
 
     @property
     def contradiction_span(self) -> str | None:

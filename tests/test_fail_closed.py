@@ -156,6 +156,44 @@ class TestMalformedBlocks:
 # --- C5: summary scanning must stay linear on adversarial output -----------------------
 
 
+class TestConflictingSummaries:
+    """The #1 false-CONTRADICTED path (audit 2026-07-10, evidence.framework_failed).
+
+    A stale/echoed summary-SHAPED failure line (`N failed … in Ns`) beside a genuine green
+    summary, paired with a non-zero compound-tail exit, satisfied all three D4 gates and no
+    guard caught it. Conflicting summaries must abstain (UNSUPPORTED), never accuse — while a
+    single mixed summary line (a genuine partial failure) must still accuse.
+    """
+
+    def test_stale_echoed_failure_summary_beside_green_does_not_accuse(self, tmp_path):
+        # A count-LESS claim so accusation_guard #1 (count-corroboration) does not fire — this
+        # is the residual path the audit found: green summary + stale failed summary + red
+        # compound-tail exit sails through every guard to a false CONTRADICTED.
+        b = SessionBuilder()
+        b.user_text("test then deploy")
+        b.bash(
+            "pytest -q ; cat ci-history.log ; ./deploy.sh",
+            "12 passed in 0.30s\n"
+            + "----- cat ci-history.log -----\n"
+            + "=== 5 failed, 3 passed in 12.01s ===\n",
+            exit_code=1,  # the ./deploy.sh tail owns the non-zero exit, not the tests
+        )
+        b.assistant_text("All tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        # conflicting green + failed summaries -> ambiguous -> abstain, NEVER CONTRADICTED
+        assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+    def test_single_mixed_summary_line_still_accuses(self, tmp_path):
+        # A genuine partial failure is ONE summary line carrying both counts — no green-only
+        # line, so it is not a conflict and must still be caught.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "5 failed, 3 passed in 12.01s", exit_code=1)
+        b.assistant_text("All tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
+
+
 class TestPathologicalOutput:
     def test_huge_near_match_single_line_adjudicates_quickly(self, tmp_path):
         b = SessionBuilder()
