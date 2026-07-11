@@ -21,3 +21,6 @@ eval/anchor/*
 tmp/
 .claude/settings.local.json
 scripts/.leakgate-names.local
+LOOP_LEARNINGS.md
+docs/audits/
+docs/decisions/

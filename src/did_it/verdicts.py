@@ -35,7 +35,7 @@ class Receipt:
 
     claim_text: str
     verdict: Verdict
-    evidence_tier: str | None = None          # witness / judged / unproven (reuses conformance evidence tiers)
+    evidence_tier: str | None = None          # witness / judged / unproven
     evidence_ref: str | None = None           # the grounding/contradicting tool-call, or None if absent
     utterance_index: int | None = None        # position in the session (utterance-time indexing)
     notes: list[str] = field(default_factory=list)

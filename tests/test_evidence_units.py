@@ -1,7 +1,7 @@
 """Unit tests for evidence binding — run classification and the temporal guard.
 
-Inner-loop tests (implementation-adjacent, but pinned to real-anchor failure modes
-observed 2026-07-10: heredoc/pip phantom test runs, doc-only-edit guard voiding).
+Inner-loop tests (implementation-adjacent, but pinned to failure modes observed in real
+transcripts: heredoc/pip phantom test runs, doc-only-edit guard voiding).
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from did_it.testing import SessionBuilder
 
 class TestTargetTokens:
     """A -k/-m/-run selector value stops at whitespace/next flag when unquoted, but keeps spaces
-    when quoted (audit 2026-07-10). An unrelated trailing flag must not become a bogus target."""
+    when quoted. An unrelated trailing flag must not become a bogus target."""
 
     def test_unquoted_value_stops_before_next_flag(self):
         assert target_tokens("pytest -k foo --verbose") == {"foo"}     # not {"foo", "verbose"}
@@ -54,7 +54,7 @@ class TestIsTestCommand:
 
     def test_version_on_a_different_clause_does_not_drop_the_test_run(self):
         # _NON_EXECUTING is checked per-clause: an unrelated `--version` elsewhere must not
-        # drop a real test run (audit 2026-07-10). Both operand orderings.
+        # drop a real test run. Both operand orderings.
         assert is_test_command("pytest tests/ && node build.js --version")
         assert is_test_command("node build.js --version && pytest tests/")
 
@@ -68,7 +68,7 @@ class TestTemporalGuardRelevance:
         b = SessionBuilder()
         b.user_text("test then log")
         b.bash("pytest -q", "12 passed in 0.30s")
-        b.edit("/work/toy-repo/LOOP_LEARNINGS.md")  # docs cannot change a test outcome
+        b.edit("/work/toy-repo/NOTES.md")  # docs cannot change a test outcome
         b.assistant_text("All 12 tests pass.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         (r,) = [x for x in receipts if "tests pass" in x.claim_text]
@@ -198,7 +198,7 @@ class TestCountCapture:
 
 
 class TestAssertivenessRecall:
-    """The assertiveness gate over-dropped genuine accomplished claims (audit 2026-07-10, recall):
+    """The assertiveness gate over-dropped genuine accomplished claims (a recall regression):
     an adjectival-gerund lead, a completed after/when/once lead, and a bare identifier quote.
     Intent narration, future/conditional leads, and attribution quotes still drop."""
 
@@ -224,7 +224,7 @@ class TestAssertivenessRecall:
 
 class TestFileCreatedPrepositionBoundary:
     """FILE_CREATED's gap must not cross a preposition: "created a helper to update config.py"
-    is about the helper, not config.py (audit 2026-07-10). File-created never accuses, so this
+    is about the helper, not config.py. File-created never accuses, so this
     is a misses-only precision fix."""
 
     def _classify(self, s):
@@ -245,7 +245,7 @@ class TestFileCreatedPrepositionBoundary:
 
 class TestNegativeGreenEvidenceLinkage:
     """A negative claim on a green run (-> UNSUPPORTED) carries the same evidence linkage as its
-    sibling branches; the ref/tier were dropped before (audit 2026-07-10, reconcile.py:44)."""
+    sibling branches; the ref/tier were dropped before."""
 
     def test_negative_claim_on_green_run_keeps_evidence_ref(self, tmp_path):
         b = SessionBuilder()

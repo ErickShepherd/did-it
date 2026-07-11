@@ -1,8 +1,7 @@
 """`--verify` execution primitives: the validated-verbatim re-run for BACKED-verified (v1.1).
 
 This is the ONLY module in did-it that executes anything. The command string comes from an
-UNTRUSTED transcript, so the trust boundary is deliberate and narrow (owner decision
-2026-07-10, "validated verbatim"):
+UNTRUSTED transcript, so the trust boundary is deliberate and narrow ("validated verbatim"):
 
   * `is_verifiable_command` admits ONLY a single, pure test-runner invocation — it rejects
     every shell control/redirection/substitution character (`; | & < > $ ` ( ) { } \\` and
@@ -29,14 +28,14 @@ from . import evidence as ev
 
 #: Shell metacharacters that enable chaining / redirection / substitution / grouping. Their
 #: mere presence disqualifies the command — we do not try to sanitize, we refuse.
-_UNSAFE = re.compile(r"[;|&<>$`(){}\n\r\\\x00]")  # \x00: NUL passed the gate then crashed subprocess (audit 2026-07-10)
+_UNSAFE = re.compile(r"[;|&<>$`(){}\n\r\\\x00]")  # \x00: NUL passed the gate then crashed subprocess
 #: A leading `NAME=value` env assignment (argv[0] would be the assignment, not the runner).
 _ENV_PREFIX = re.compile(r"^\s*\w+=")
 _MAX_LEN = 4096
 
 #: Argument gate is a POSITIVE allow-list, not a denylist. A denylist of code-loading options
 #: proved bypassable by glued short options (`-r/tmp/evil.rb`, `-pevilplugin`) and by any option
-#: not enumerated (review round 3), because `-p<name>` is indistinguishable from a benign `-x`
+#: not enumerated, because `-p<name>` is indistinguishable from a benign `-x`
 #: without per-runner knowledge. So only these known-benign flags — plus in-repo relative path
 #: arguments — are admitted; everything else fails closed (the claim stays BACKED-transcript).
 _FLAGS_NO_VALUE = frozenset({
@@ -96,7 +95,7 @@ def is_verifiable_command(command: str) -> bool:
     # — `.venv/bin/python`, `tests/foo.py` — is the repo's own code, which any test run executes
     # anyway); flags must be enumerated benign ones; a value flag's value is a benign scalar.
     # Anything else — an unknown/glued flag, an out-of-repo path — fails closed.
-    # Residual (documented, review round 3 non-blocking): a bare go/unittest import-path
+    # Residual (documented, non-blocking): a bare go/unittest import-path
     # positional (`go test host.tld/pkg`) is admitted; go's read-only mode keeps it inside the
     # declared dependency tree rather than fetching, so it stays within --verify's repo consent.
     expect_value = False
@@ -155,7 +154,7 @@ def run_command(command: str, cwd: str, *, runs: int = _DEFAULT_RUNS,
                      output=output, ref="verify", is_test_run=True)
         # A verify UPGRADE demands POSITIVE evidence a test actually ran — a framework-green
         # summary, not a bare exit 0. A no-op `test` script (`npm test` -> `echo ok`) exits 0
-        # with no summary and must NOT be endorsed as BACKED-verified (audit 2026-07-10).
+        # with no summary and must NOT be endorsed as BACKED-verified.
         # classify_outcome's bare-exit-0 green is right for transcript-time coverage but too weak
         # for re-execution's stronger claim; a run with neither a green nor a red framework
         # summary counts as neither, so it can never make an all-green upgrade.
@@ -169,7 +168,7 @@ def run_command(command: str, cwd: str, *, runs: int = _DEFAULT_RUNS,
         return VerifyResult("red", f"{reds}/{total} red")
     if greens > 0:
         # Account for runs that were neither framework-green nor framework-red (ambiguous /
-        # errored): otherwise "1 green / 0 red of 2" omits the inconclusive run (audit 2026-07-10).
+        # errored): otherwise "1 green / 0 red of 2" omits the inconclusive run.
         inconclusive = total - greens - reds
         detail = f"{greens} green / {reds} red"
         if inconclusive:

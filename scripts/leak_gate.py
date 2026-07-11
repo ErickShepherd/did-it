@@ -32,7 +32,7 @@ MARKER = "FIXTURES_ONLY"
 #: blank lines ignored). This module supplies only the MECHANISM; the owner supplies the content.
 #: Absent file -> no extra patterns (the check is a no-op until names are provided). Matching is
 #: substring + case-insensitive: any occurrence of a private name flags the file, the
-#: privacy-conservative choice (the owner tunes the list). Added by the audit loop 2026-07-10.
+#: privacy-conservative choice (the owner tunes the list).
 LOCAL_NAMES_FILE = Path(__file__).with_name(".leakgate-names.local")
 
 
@@ -71,7 +71,7 @@ def scan(path: Path, extra_deny: list[re.Pattern[str]] | None = None) -> list[st
         if pat.search(text):
             problems.append(f"{path}: matches deny pattern /{pat.pattern}/")
     # Every committed file under fixtures/ must carry the marker, not just .json/.jsonl — a
-    # .log/.txt/extensionless fixture was silently exempt (audit 2026-07-10; matches the README's
+    # .log/.txt/extensionless fixture was silently exempt (matches the README's
     # "Every committed fixture" rule). README.md carries the marker in its prose, so it passes.
     if "fixtures" in path.parts and MARKER not in text:
         problems.append(f"{path}: missing required '{MARKER}' marker")

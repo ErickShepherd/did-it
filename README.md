@@ -85,9 +85,12 @@ cluster-bootstrap CIs; the headline scalar is F0.5 on `CONTRADICTED`. Recall on 
 **upper bound** — organic confabulations are messier than mutants.
 
 A private execution-labeled anchor (the author's own real sessions; never committed — enforced by a
-pre-commit leak gate) cross-checks external validity. Current calibration: **0 false accusations across
-200 real coding sessions**, with three real false-accusation classes found and eliminated during
-calibration (compound-command exit bleed, SIGPIPE exits, adjacent-tool error counts).
+pre-commit leak gate) cross-checks external validity. Across **200 real coding sessions the tool issued
+zero `CONTRADICTED` verdicts** — so zero false accusations — after calibration surfaced and eliminated
+three real false-accusation classes (compound-command exit bleed, SIGPIPE exits, adjacent-tool error
+counts). Accusation **precision is measured on the synthetic corpus above** (1.0 on the held-out split);
+the real anchor fired no accusations at all, so it bounds the false-positive rate rather than measuring
+precision directly.
 
 ## Install & develop
 

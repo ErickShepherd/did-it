@@ -39,14 +39,13 @@ class Claim:
 # --- 2. process-narration filter (NOT-A-CLAIM) --------------------------------------
 
 #: Workflow/meta narration — agent-process vocabulary, not code-capability claims.
-#: Spike 2026-07-09: ~a third of "semantic" sentences on real sessions are this.
+#: Spike: ~a third of "semantic" sentences on real sessions are this.
 PROCESS_NARRATION = [
     re.compile(r"\bSIGN[- ]?OFF\b"),
     re.compile(r"\bCHANGES[- ]REQUESTED\b"),
     re.compile(r"\bresolved autonomously\b", re.I),
     re.compile(r"\bper the [\w-]+ (?:rubric|policy|skill)\b", re.I),
-    re.compile(r"\bLOOP_LEARNINGS\b"),
-    re.compile(r"\b(?:pre-merge-review|ralph-loop|conformance|worktree)\b", re.I),
+    re.compile(r"\bworktree\b", re.I),
     re.compile(r"\b(?:todo list|todo item|handoff|wakeup|turn ends?)\b", re.I),
     re.compile(r"\bmark(?:ed|ing)? (?:the )?(?:todo|task|item)\b", re.I),
     re.compile(r"\bno open (?:forks?|questions?|items?)\b", re.I),
@@ -74,7 +73,7 @@ HEDGES = re.compile(
 
 CONDITIONAL_LEAD = re.compile(r"^\s*(?:if|when|unless|until|before|after|assuming|suppose)\b", re.I)
 #: A completed `after/once/when <past-tense>, …` lead is an accomplished report, not a condition —
-#: "After I fixed the bug, all tests pass." asserts the main clause (audit 2026-07-10, recall).
+#: "After I fixed the bug, all tests pass." asserts the main clause.
 COMPLETED_LEAD = re.compile(
     r"^\s*(?:after|once|when)\b[^,]*\b(?:ran|passed|failed|fixed|added|created|built|made|wrote|"
     r"ended|finished|completed|updated|resolved|merged|committed|\w+ed)\b[^,]*,",
@@ -90,14 +89,14 @@ INTENT_LEAD = re.compile(
 _ING_NOUNS = re.compile(r"^\s*(?:everything|nothing|anything|something|string|warning)\b", re.I)
 #: An ADJECTIVAL gerund lead — a gerund directly followed by a bare noun (not a determiner/prep)
 #: and a main verb — is an assertion ("Passing tests confirm …"), not intent narration ("Verifying
-#: the … tests …") (audit 2026-07-10, recall).
+#: the … tests …").
 ADJECTIVAL_ING = re.compile(
     r"^\s*\w+ing\s+(?!the\b|a\b|an\b|this\b|that\b|these\b|those\b|my\b|our\b|its\b|then\b|to\b"
     r"|for\b|into\b|on\b|by\b|with\b|up\b|down\b|it\b|them\b|us\b|and\b|or\b)\w+s?\b\s+\w",
     re.I,
 )
 #: Only ATTRIBUTION quoting suppresses — a multi-word "quoted phrase" or a curly-quote span. A
-#: short identifier quote (`"test_foo"`, `"config.py"`) is not attribution (audit 2026-07-10, recall).
+#: short identifier quote (`"test_foo"`, `"config.py"`) is not attribution.
 ATTRIBUTION_QUOTE = re.compile(r'"[^"\n]*\s[^"\n]*"|“')
 
 
@@ -163,7 +162,7 @@ CHECK_PASS = re.compile(
 )
 
 #: `return(?:ed|s)?` REQUIRES a following `code`: bare "returns 0 when empty" / "returned 3
-#: results" are behavioral prose, not an exit-code claim (audit 2026-07-10). Run-context forms
+#: results" are behavioral prose, not an exit-code claim. Run-context forms
 #: (exit/exited with/exit code, rc=, returned code N) still match.
 EXIT_CODE = re.compile(
     r"\b(?:exit(?:ed|s)?(?:\s+with)?(?:\s+code)?|rc|return(?:ed|s)?\s+code)"
@@ -174,7 +173,7 @@ EXIT_CODE = re.compile(
 #: Past forms only: base-form "write X" / "add X" is future intent, not an accomplished fact.
 FILE_CREATED = re.compile(
     # The gap between the verb and the path may NOT cross a preposition: "created a helper to
-    # update config.py" is about the helper, not config.py (audit 2026-07-10). Tempered scan
+    # update config.py" is about the helper, not config.py. Tempered scan
     # stops before to/for/from/into/in/with/of/on/at/by, so the path must be the verb's own object.
     r"\b(?:created|added|wrote|written|generated|saved)\b"
     r"(?:(?!\b(?:to|for|from|into|in|with|of|on|at|by)\b)[^.;])*?"
@@ -208,8 +207,8 @@ def _pass_clause_to_end(sentence: str, pos: int) -> str:
     Negation for a pass-claim is judged over this span, not the whole sentence: a failure word
     in an EARLIER `;`-clause is prior context ("Fixed the broken import; all tests pass.") and
     must not invert the pass, while a LIVE failure alongside or AFTER the pass ("all tests pass;
-    the suite still fails") stays in-span and keeps the claim negative — never a false accusation
-    (audit 2026-07-10). No `;` before `pos` -> the whole sentence (comma-joined partial reports
+    the suite still fails") stays in-span and keeps the claim negative — never a false accusation.
+    No `;` before `pos` -> the whole sentence (comma-joined partial reports
     like "all tests pass, no new failures, though X still fails" are unchanged).
     """
     return sentence[sentence.rfind(";", 0, pos) + 1:]
@@ -219,7 +218,7 @@ def _classify(sentence: str) -> Claim | None:
     """Classify one clean prose sentence; None if it makes no claim at all."""
     c = Claim(text=sentence, utterance_index=-1)
     # rstrip: BIND_TOKEN swallows sentence-final punctuation ("… requirements.txt."),
-    # which broke binding against the exactly-matching command (panel, seat-4).
+    # which broke binding against the exactly-matching command.
     c.tokens = [t.rstrip(".,;:!?") for t in BIND_TOKEN.findall(sentence)]
 
     # Negation is judged on the exemption-STRIPPED residual: "no failures" clears the flag
@@ -240,7 +239,7 @@ def _classify(sentence: str) -> Claim | None:
         # (3 did not pass) — a failure admission, not a clean pass. Left positive it could be
         # asserted as a pass against a partially-red run and, when the count guard misses (the
         # claim's count != the run's own passed count), falsely CONTRADICTED. Route it negative
-        # so it is never an accusation (audit 2026-07-10).
+        # so it is never an accusation.
         if m.group("count3") and m.group("total") and (
             int(m.group("total").replace(",", "")) > int(m.group("count3").replace(",", ""))
         ):
@@ -258,7 +257,7 @@ def _classify(sentence: str) -> Claim | None:
                 c.count = int(m2.group(1).replace(",", ""))
         return c
     # TEST_FAIL on the exemption-STRIPPED residual: "0 failed." / "0 tests failed." are
-    # zero-failure PASS statements, not failure claims (audit 2026-07-10).
+    # zero-failure PASS statements, not failure claims.
     if TEST_FAIL.search(exempt) or (m and pass_negated):
         c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
         return c
@@ -293,7 +292,7 @@ def _classify(sentence: str) -> Claim | None:
 
 #: Explicit outcome-claim patterns that OVERRIDE the process-narration drop: "All tests
 #: pass in the worktree" is a checkable claim even though it carries workflow vocabulary
-#: (panel, seat-4: the filter was overfit to the author's process words). command-ran and
+#: (the filter was overfit to the author's process words). command-ran and
 #: semantic verbs deliberately do NOT override — they saturate genuine narration.
 def _has_checkable_pattern(sentence: str) -> bool:
     return bool(
@@ -316,7 +315,7 @@ SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z`\"'\d(])")
 #: FILE_CREATED (and the runner scans) are O(n^2) on a dotless multi-KB untrusted line (measured
 #: 3.8s at 32KB); a per-sentence cap bounds each scan and makes the total linear in the input.
 #: Real claim sentences are short — truncating a pathological one can at worst drop a claim that
-#: begins past the cap (lost coverage, never a false accusation) (audit 2026-07-10).
+#: begins past the cap (lost coverage, never a false accusation).
 _MAX_SENTENCE_CHARS = 2048
 
 
@@ -348,7 +347,7 @@ def extract_claims(session) -> list[Claim]:  # noqa: ANN001  (Session; avoid imp
                 continue  # thinking / tool_use are not user-facing prose
             text = block.get("text")
             if not isinstance(text, str):
-                continue  # malformed block internals fail closed, never crash (C4)
+                continue  # malformed block internals fail closed, never crash
             for sent in sentences(text):
                 if is_process_narration(sent) and not _has_checkable_pattern(sent):
                     continue  # NOT-A-CLAIM

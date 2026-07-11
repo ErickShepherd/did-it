@@ -94,13 +94,13 @@ def test_corpus_labels_carry_expected_verdicts():
     items = corpus.build(seed=0)
     # Every item carries expected verdicts EXCEPT an honest-hedge session, which makes no
     # checkable claim: its ground truth is "no accusation", enforced by scoring's
-    # any-unexpected-CONTRADICTED rule (this is what made the forbidden list redundant — C8).
+    # any-unexpected-CONTRADICTED rule (this is what made the forbidden list redundant).
     assert all(i.expected for i in items if not (i.operator is None and i.template == "hedged"))
     honest = [i for i in items if i.operator is None]
     assert honest, "corpus must include honest (no-lie) sessions to measure false accusations"
 
 
-# --- C8: the corpus must be able to fail on the axes the panel fixed -------------------
+# --- the corpus must be able to fail on the axes the guards protect -------------------
 
 
 def test_corpus_includes_guard_exercising_honest_templates():
@@ -116,7 +116,7 @@ def test_corpus_includes_guard_exercising_honest_templates():
 
 
 def test_cargo_template_emits_cargo_shaped_output():
-    # Known finding #3 extended: RUNNERS advertised cargo but emitted pytest-shaped
+    # RUNNERS advertised cargo but emitted pytest-shaped
     # output, so the metric could not reveal runner blindness.
     item = corpus.template_green_run(runner="cargo test", count=7)
     outputs = [
@@ -131,7 +131,7 @@ def test_cargo_template_emits_cargo_shaped_output():
 
 def test_flip_operator_applicable_to_now_literate_runners():
     # v1.1 closed the jest/npm/go blindness, so a flip on those runners IS catchable and
-    # must be exercised by the eval (previously excluded — panel C8 / published limitation).
+    # must be exercised by the eval (previously excluded — published limitation).
     for runner in ("npm test", "go test ./...", "cargo test"):
         item = corpus.template_green_run(runner=runner, count=7)
         assert operators.applicable("flip_exit_code", item), runner
@@ -159,7 +159,7 @@ def test_miscount_excluded_for_countless_runners():
 def test_scoring_counts_unexpected_contradicted_on_any_item():
     # A false CONTRADICTED inside a flip session must count as a false accusation, not vanish:
     # scoring derives false-accusation from `expected`, so ANY unexpected CONTRADICTED counts
-    # (this is why the old forbidden-list gate was dropped — panel C8).
+    # (this is why the old forbidden-list gate was dropped).
     from eval import run as eval_run
 
     class _R:
@@ -195,7 +195,7 @@ def test_report_undefined_metrics_are_none_not_perfect():
              "false_contradicted": 0, "got": {}}]
     out = eval_run.report(rows)
     assert out["contradicted"]["recall"] is None  # no positives to recall — not 1.0
-    # an undefined bar's CI is None too — never a fabricated interval (audit 2026-07-10)
+    # an undefined bar's CI is None too — never a fabricated interval
     assert out["contradicted"]["recall_ci95"] is None
     assert out["contradicted"]["precision_ci95"] is None
     assert out["fake_pass_catch"]["ci95"] is None
@@ -210,7 +210,7 @@ def _row(session, *, operator=None, template="green-run", expected=0, true=0, fa
 
 def test_report_headline_bars_carry_bracketing_ci95():
     # The docstring promises cluster-bootstrap CIs on every bar; 3 of 4 shipped as bare point
-    # estimates (audit 2026-07-10). Each bar must now carry a ci95 that brackets its point.
+    # estimates. Each bar must now carry a ci95 that brackets its point.
     from eval import run as eval_run
 
     rows = [
@@ -255,7 +255,7 @@ def test_cluster_bootstrap_ratio_ci_is_none_when_undefined():
 
 def test_committed_corpus_matches_regeneration(tmp_path):
     # The committed fixtures are the published, checkable corpus: regeneration drift
-    # must fail loudly (write_corpus previously had zero callers — panel C8).
+    # must fail loudly (write_corpus previously had zero callers).
     from pathlib import Path
 
     out = corpus.write_corpus(corpus.build(seed=0), tmp_path / "corpus")
@@ -301,7 +301,7 @@ def test_cluster_bootstrap_ci_rejects_empty_values():
         metrics.cluster_bootstrap_ci([], [], statistic=lambda v: 0.0)
 
 
-# --- anchor_scan privacy gate (audit 2026-07-10) --------------------------------------
+# --- anchor_scan privacy gate --------------------------------------
 
 
 def test_anchor_scan_refuses_verbatim_without_ack(monkeypatch, capsys):
@@ -337,7 +337,7 @@ def test_anchor_scan_aggregates_need_no_ack(monkeypatch, capsys):
 
 
 def test_session_builder_timestamps_stay_valid_and_monotonic_past_an_hour():
-    # counter//60 hit 60 at 3600 records -> "00:60:00", an invalid ISO timestamp (audit 2026-07-10).
+    # counter//60 hit 60 at 3600 records -> "00:60:00", an invalid ISO timestamp.
     from datetime import datetime
 
     from did_it.testing import SessionBuilder

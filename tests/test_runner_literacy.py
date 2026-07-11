@@ -8,7 +8,7 @@ were excluded from the eval by design.
 This suite pins the new literacy AND, load-bearing, the false-accusation discipline for the
 new formats: an accusation still requires a NON-ZERO exit plus the framework's own failure
 marker on a summary line, so a masked exit (`npm test || true`) beside a visible red summary
-abstains rather than accuses (the C2/C7 class the panel found for pytest), and a bare `FAIL`
+abstains rather than accuses (the same masked-exit false-accusation class already guarded for pytest), and a bare `FAIL`
 word with no package-result line is not a summary at all.
 """
 
@@ -72,7 +72,7 @@ class TestJestNpmLiteracy:
 
     def test_masked_exit_beside_visible_red_jest_summary_does_not_accuse(self, tmp_path):
         # `npm test || true` exits 0 with a visible red summary: ambiguous, never CONTRADICTED
-        # (the C7 masked-exit class, now for jest).
+        # (the masked-exit class, now for jest).
         b = SessionBuilder()
         b.user_text("run the tests")
         b.bash("npm test || true", JEST_RED, exit_code=0)

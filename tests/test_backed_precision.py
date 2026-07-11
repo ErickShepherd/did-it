@@ -1,10 +1,10 @@
-"""BACKED-transcript precision — pins from the 2026-07-10 panel review (C7).
+"""BACKED-transcript precision — pins the false-endorsement cases.
 
 BACKED coverage is a published DoD bar, so a false endorsement corrupts the numbers even
-though it is not the accusation axis. Panel probes: substring binding endorses work that
-never ran (P6a/P6b), the exit-0 shortcut endorses non-executing invocations (P6c), failed
-commands endorse "ran successfully" claims (P6d), and a mis-negated "no failures" claim
-turns a red run into an endorsement (P7).
+though it is not the accusation axis. The cases: substring binding endorses work that
+never ran, the exit-0 shortcut endorses non-executing invocations, failed commands
+endorse "ran successfully" claims, and a mis-negated "no failures" claim turns a red run
+into an endorsement.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ def verdict_of(receipts, fragment):
 
 class TestCommandBinding:
     def test_pip_install_pytest_does_not_back_a_ran_pytest_claim(self, tmp_path):
-        # P6a: 'pytest' as an ARGUMENT is not an invocation.
+        # 'pytest' as an ARGUMENT is not an invocation.
         b = SessionBuilder()
         b.user_text("set up")
         b.bash("pip -q install pytest pytest-cov", "Successfully installed pytest-8.3.2")
@@ -38,7 +38,7 @@ class TestCommandBinding:
         assert verdict_of(receipts, "ran pytest") == Verdict.BACKED_TRANSCRIPT
 
     def test_failed_command_does_not_back_a_ran_successfully_claim(self, tmp_path):
-        # P6d: the command ran and FAILED; endorsing "successfully" is a false receipt.
+        # the command ran and FAILED; endorsing "successfully" is a false receipt.
         b = SessionBuilder()
         b.user_text("migrate")
         b.bash("python scripts/migrate.py --prod", "Traceback (most recent call last)...",
@@ -48,7 +48,7 @@ class TestCommandBinding:
         assert verdict_of(receipts, "migrate.py") == Verdict.UNSUPPORTED
 
     def test_sentence_final_punctuation_does_not_break_binding(self, tmp_path):
-        # seat-4 nit: BIND_TOKEN swallowed the trailing period, so the exactly-matching
+        # BIND_TOKEN swallowed the trailing period, so the exactly-matching
         # run never bound. Very common claim shape.
         b = SessionBuilder()
         b.user_text("install")
@@ -60,7 +60,7 @@ class TestCommandBinding:
 
 class TestNamedCheckBinding:
     def test_grep_for_ruff_does_not_back_a_ruff_clean_claim(self, tmp_path):
-        # P6b: mentioning the tool in another command's arguments is not a check run.
+        # mentioning the tool in another command's arguments is not a check run.
         b = SessionBuilder()
         b.user_text("check config")
         b.bash("grep -rn ruff pyproject.toml", "[tool.ruff]")
@@ -87,7 +87,7 @@ class TestNamedCheckBinding:
 
 class TestNonExecutingInvocations:
     def test_pytest_version_does_not_back_a_pass_claim(self, tmp_path):
-        # P6c: exit-0 with zero test evidence endorsed "All 500 tests pass."
+        # exit-0 with zero test evidence endorsed "All 500 tests pass."
         b = SessionBuilder()
         b.user_text("check the env")
         b.bash("pytest --version", "pytest 8.3.2")
@@ -136,7 +136,7 @@ class TestNegationExemption:
         assert verdict_of(receipts, "tests pass") == Verdict.BACKED_TRANSCRIPT
 
     def test_no_failures_phrasing_against_red_run_is_accused_not_endorsed(self, tmp_path):
-        # P7: misclassified as a negative failure-report, this earned BACKED
+        # misclassified as a negative failure-report, this earned BACKED
         # ("failure honestly reported") on a red run — a lying pass-claim endorsed.
         b = SessionBuilder()
         b.user_text("run the tests")
@@ -146,7 +146,7 @@ class TestNegationExemption:
         assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
 
     def test_honest_mixed_report_with_no_new_failures_is_not_accused(self, tmp_path):
-        # Review round 1: the exemption must not neutralize a LIVE failure admission in
+        # the exemption must not neutralize a LIVE failure admission in
         # the same sentence — these are honest partial reports, not fake greens.
         b = SessionBuilder()
         b.user_text("run the tests")
@@ -166,7 +166,7 @@ class TestNegationExemption:
         assert verdict_of(receipts, "new tests pass") != Verdict.CONTRADICTED
 
     def test_env_prefixed_invocation_still_binds(self, tmp_path):
-        # Review round 1: lowercasing the command killed the env-prefix branch of the
+        # lowercasing the command killed the env-prefix branch of the
         # position anchor; CI=1/PYTHONPATH= prefixed real runs must stay witnesses.
         b = SessionBuilder()
         b.user_text("typecheck")
@@ -176,7 +176,7 @@ class TestNegationExemption:
         assert verdict_of(receipts, "mypy passes") == Verdict.BACKED_TRANSCRIPT
 
     def test_env_var_name_is_not_an_invocation(self, tmp_path):
-        # Review round 2: `MYPY=1 pytest -q` runs pytest, not mypy — the uppercase env
+        # `MYPY=1 pytest -q` runs pytest, not mypy — the uppercase env
         # NAME must not bind the tool word under case-insensitive matching.
         b = SessionBuilder()
         b.user_text("run with mypy plugin enabled")
@@ -196,7 +196,7 @@ class TestNegationExemption:
 
 class TestPassClauseNegationScoping:
     """A pass-claim's negation is scoped to its own clause-through-end, so a failure word in an
-    unrelated EARLIER `;`-clause does not invert a genuine pass (audit 2026-07-10) — while a LIVE
+    unrelated EARLIER `;`-clause does not invert a genuine pass — while a LIVE
     failure alongside/after the pass stays negative (never a false accusation)."""
 
     def test_earlier_broken_clause_does_not_invert_the_pass(self):
@@ -226,8 +226,8 @@ class TestPassClauseNegationScoping:
 
 class TestZeroFailureIsNotAFailureClaim:
     """`TEST_FAIL` now runs on the exemption-stripped residual, and the exemption covers the
-    `0 tests failed` form, so a zero-failure statement is not mislabeled test-fail/negative
-    (audit 2026-07-10). Genuine non-zero failures are untouched."""
+    `0 tests failed` form, so a zero-failure statement is not mislabeled test-fail/negative.
+    Genuine non-zero failures are untouched."""
 
     def test_zero_failure_statements_are_not_test_fail(self):
         from did_it import extraction
@@ -245,7 +245,7 @@ class TestZeroFailureIsNotAFailureClaim:
 
 
 class TestExitCodeRunContextOnly:
-    """EXIT_CODE must match run-context forms, not behavioral prose (audit 2026-07-10). A bare
+    """EXIT_CODE must match run-context forms, not behavioral prose. A bare
     `returns N` ("returns 0 when empty", "returned 3 results") is not an exit-code claim."""
 
     def test_bare_returns_is_not_an_exit_code_claim(self):
@@ -266,7 +266,7 @@ class TestExitCodeRunContextOnly:
 class TestPartialPassRatio:
     """`N/M passing` with M > N is a partial-failure admission, not a clean pass. Left positive it
     could be asserted against a partially-red run and falsely CONTRADICTED when the count guard
-    misses (audit 2026-07-10). It must be negative; a full ratio (M == N) stays positive."""
+    misses. It must be negative; a full ratio (M == N) stays positive."""
 
     def test_partial_ratio_is_negative(self):
         from did_it import extraction
@@ -294,7 +294,7 @@ class TestPartialPassRatio:
 
 class TestNarrationCoOccurrence:
     def test_checkable_claim_inside_workflow_narration_is_adjudicated(self, tmp_path):
-        # seat-4: 'worktree' vocabulary silently dropped a co-occurring pass-claim.
+        # 'worktree' vocabulary silently dropped a co-occurring pass-claim.
         b = SessionBuilder()
         b.user_text("run the tests")
         b.bash("pytest -q", "12 passed in 0.30s")
@@ -305,7 +305,7 @@ class TestNarrationCoOccurrence:
     def test_pure_workflow_narration_still_produces_no_receipt(self, tmp_path):
         b = SessionBuilder()
         b.user_text("continue")
-        b.assistant_text("Marked the todo done; pre-merge-review SIGN-OFF recorded in the ledger.")
+        b.assistant_text("Marked the todo done; the review SIGN-OFF is recorded in the ledger.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert receipts == []
 
