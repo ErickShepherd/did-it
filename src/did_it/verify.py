@@ -151,10 +151,15 @@ def run_command(command: str, cwd: str, *, runs: int = _DEFAULT_RUNS,
         output = (cp.stdout or "") + (f"\n{cp.stderr}" if cp.stderr else "")
         run = ev.Run(index=0, command=command, exit_code=cp.returncode,
                      output=output, ref="verify", is_test_run=True)
-        outcome = ev.classify_outcome(run)[0]
-        if outcome == "green":
+        # A verify UPGRADE demands POSITIVE evidence a test actually ran — a framework-green
+        # summary, not a bare exit 0. A no-op `test` script (`npm test` -> `echo ok`) exits 0
+        # with no summary and must NOT be endorsed as BACKED-verified (audit 2026-07-10).
+        # classify_outcome's bare-exit-0 green is right for transcript-time coverage but too weak
+        # for re-execution's stronger claim; a run with neither a green nor a red framework
+        # summary counts as neither, so it can never make an all-green upgrade.
+        if run.framework_green:
             greens += 1
-        elif outcome == "red":
+        elif ev.classify_outcome(run)[0] == "red":
             reds += 1
     if greens == total:
         return VerifyResult("green", f"{greens}/{total} green")

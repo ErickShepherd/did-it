@@ -147,6 +147,15 @@ class TestExecutorAggregation:
         monkeypatch.setattr(verify.subprocess, "run", boom)
         assert verify.run_command("pytest -q", "/repo", runs=2).status == "errored"
 
+    def test_bare_exit_zero_without_summary_is_not_green(self, monkeypatch):
+        # A no-op `test` script (`npm test` -> `echo ok`) exits 0 with NO framework summary.
+        # Re-execution must not endorse it as green — nothing actually ran, so no BACKED-verified
+        # upgrade (audit 2026-07-10). It counts as neither green nor red -> errored.
+        self._fake(monkeypatch, [(0, "ok\n"), (0, "ok\n")])
+        result = verify.run_command("npm test", "/repo", runs=2)
+        assert result.status != "green"
+        assert result.status == "errored"
+
     def test_runs_with_shell_false_and_argv(self, monkeypatch):
         seen = {}
         class _CP:
