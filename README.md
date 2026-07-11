@@ -7,6 +7,7 @@
 
 <p align="center">
   <a href="https://github.com/ErickShepherd/did-it/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ErickShepherd/did-it/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://doi.org/10.5281/zenodo.21315914"><img alt="DOI" src="https://img.shields.io/badge/DOI-10.5281%2Fzenodo.21315914-blue"></a>
 </p>
 
 > *did it? did it **really**?*
