@@ -138,6 +138,14 @@ class TestExecutorAggregation:
         self._fake(monkeypatch, [(0, "3 passed in 0.01s"), (1, "1 failed, 2 passed in 0.01s")])
         assert verify.run_command("pytest -q", "/repo", runs=2).status == "flaky"
 
+    def test_flaky_detail_accounts_for_inconclusive_runs(self, monkeypatch):
+        # 1 green + 1 inconclusive (exit 0, no summary) is flaky; the detail must not read
+        # "1 green / 0 red of 2" and drop the inconclusive run (audit 2026-07-10).
+        self._fake(monkeypatch, [(0, "3 passed in 0.01s"), (0, "ok\n")])
+        result = verify.run_command("pytest -q", "/repo", runs=2)
+        assert result.status == "flaky"
+        assert "1 inconclusive" in result.detail and "of 2" in result.detail
+
     def test_timeout_is_errored(self, monkeypatch):
         def boom(argv, **kw):
             raise verify.subprocess.TimeoutExpired(argv, kw.get("timeout"))

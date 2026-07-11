@@ -168,5 +168,11 @@ def run_command(command: str, cwd: str, *, runs: int = _DEFAULT_RUNS,
     if greens == 0 and reds > 0:
         return VerifyResult("red", f"{reds}/{total} red")
     if greens > 0:
-        return VerifyResult("flaky", f"{greens} green / {reds} red of {total}")
+        # Account for runs that were neither framework-green nor framework-red (ambiguous /
+        # errored): otherwise "1 green / 0 red of 2" omits the inconclusive run (audit 2026-07-10).
+        inconclusive = total - greens - reds
+        detail = f"{greens} green / {reds} red"
+        if inconclusive:
+            detail += f" / {inconclusive} inconclusive"
+        return VerifyResult("flaky", f"{detail} of {total}")
     return VerifyResult("errored", "no readable framework outcome")
