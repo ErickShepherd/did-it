@@ -16,15 +16,21 @@ Deps: vtracer, pillow, scipy, numpy.  Usage:
   trace_logo.py SRC.png OUT.svg --field '#2E3A4E' --structure '#F4F1E8' [--accent '#E0A94A']
                 [--chroma 40] [--luma 140] [--no-tile] [--tile-radius-frac 0.12]
 """
-import argparse, os, re, tempfile
+import argparse
+import os
+import re
+import tempfile
+
 import numpy as np
 from PIL import Image
 from scipy.ndimage import binary_dilation, label
 import vtracer
 
 ap = argparse.ArgumentParser()
-ap.add_argument("src"); ap.add_argument("out")
-ap.add_argument("--field", required=True); ap.add_argument("--structure", required=True)
+ap.add_argument("src")
+ap.add_argument("out")
+ap.add_argument("--field", required=True)
+ap.add_argument("--structure", required=True)
 ap.add_argument("--accent", default=None)
 ap.add_argument("--chroma", type=int, default=40, help="min channel spread to count as accent")
 ap.add_argument("--luma", type=int, default=140, help="brightness split: >= is structure, < is field")
