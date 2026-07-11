@@ -42,7 +42,8 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
     if e.outcome == "green":
         if claim.polarity == "negative":
             return _receipt(claim, Verdict.UNSUPPORTED, note="last test run was green")
-        observed = _passed_count(_run_output(index, e))
+        run = _run_for(index, e)
+        observed = ev.summary_passed_count(run) if run else None
         if claim.count is not None and observed is not None and observed != claim.count:
             # explicit miscount is suspicious but not the D4 trigger -> abstain, flag it
             # (a truncated output with no visible count does NOT demote a green run)
@@ -69,18 +70,6 @@ def _run_for(index: ev.Index, e: ev.Evidence) -> ev.Run | None:
         if run.ref == e.ref:
             return run
     return None
-
-
-def _run_output(index: ev.Index, e: ev.Evidence) -> str:
-    run = _run_for(index, e)
-    return run.output if run else ""
-
-
-def _passed_count(output: str) -> int | None:
-    # Whole-output read (v1.1 backlog: restrict to the summary line, as
-    # evidence.summary_passed_count already does on the accusation path).
-    m = ev._PASSED_N.search(output)
-    return int(m.group(1).replace(",", "")) if m else None
 
 
 def _named_check(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001

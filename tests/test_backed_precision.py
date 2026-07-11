@@ -210,3 +210,29 @@ class TestNarrationCoOccurrence:
         b.assistant_text("Marked the todo done; pre-merge-review SIGN-OFF recorded in the ledger.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert receipts == []
+
+
+class TestMiscountReadsSummaryLine:
+    """The green-branch count check reads the framework summary line, not the whole output.
+
+    A stray `N passed` elsewhere in the output (a setup/plugin line) must not be mistaken for
+    the run's pass count and demote a truthful pass-claim to UNSUPPORTED (a lost BACKED — a
+    miss, never an accusation). Aligns the green branch with the accusation path, which already
+    reads only `evidence.summary_passed_count`.
+    """
+
+    def test_stray_passed_line_does_not_demote_a_truthful_count(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "note: 3 passed earlier in setup\n12 passed in 0.30s")
+        b.assistant_text("All 12 tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.BACKED_TRANSCRIPT
+
+    def test_genuine_miscount_vs_summary_still_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("All 13 tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
