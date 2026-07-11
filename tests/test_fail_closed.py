@@ -11,10 +11,38 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+import pytest
+
 import did_it
-from did_it import cli, hook, report
+from did_it import cli, hook, report, transcript
 from did_it.testing import SessionBuilder
 from did_it.verdicts import Receipt, Verdict
+
+
+class TestParseFailsClosedOnPathologicalJson:
+    """transcript.parse must fail closed at ITS OWN boundary (raise ParseFailure), not just
+    behind check()'s wrapper (audit 2026-07-10, transcript.py:96). json.loads raises siblings
+    of JSONDecodeError on two tiny adversarial inputs — both escaped the old narrow catch.
+    """
+
+    def test_deeply_nested_json_line_raises_parsefailure_not_recursionerror(self, tmp_path):
+        p = tmp_path / "t.jsonl"
+        p.write_text("[" * 100_000 + "]" * 100_000 + "\n")  # RecursionError in the C decoder
+        with pytest.raises(transcript.ParseFailure):
+            transcript.parse(p)
+
+    def test_huge_integer_line_raises_parsefailure_not_valueerror(self, tmp_path):
+        p = tmp_path / "t.jsonl"
+        p.write_text("1" * 5000 + "\n")  # ValueError: exceeds int_max_str_digits
+        with pytest.raises(transcript.ParseFailure):
+            transcript.parse(p)
+
+    def test_end_to_end_check_is_not_evaluable(self, tmp_path):
+        # Belt-and-suspenders: the whole pipeline stays NOT-EVALUABLE, never a raise.
+        p = tmp_path / "t.jsonl"
+        p.write_text("1" * 5000 + "\n")
+        (r,) = did_it.check(p)
+        assert r.verdict == Verdict.NOT_EVALUABLE
 
 
 def verdict_of(receipts, fragment):

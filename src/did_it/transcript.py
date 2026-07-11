@@ -93,7 +93,12 @@ def parse(path: str | Path) -> Session:
             continue
         try:
             rec = json.loads(line)
-        except json.JSONDecodeError as e:
+        except (ValueError, RecursionError) as e:
+            # JSONDecodeError (a ValueError subclass) is the common case; two adversarial-but-
+            # tiny inputs raise siblings that escaped the old narrow catch and violated
+            # fail-closed (audit 2026-07-10): a huge integer literal hits int()'s
+            # int_max_str_digits limit (ValueError), and ~200KB of nested brackets overflows
+            # the JSON C decoder (RecursionError). Both must be NOT-EVALUABLE, never a crash.
             raise ParseFailure(f"{path.name}:{lineno}: unparseable line") from e
         if not isinstance(rec, dict):
             raise ParseFailure(f"{path.name}:{lineno}: non-object record")
