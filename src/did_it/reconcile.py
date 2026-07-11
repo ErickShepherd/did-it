@@ -63,6 +63,10 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
             # with no guard. Fail closed: never accuse a non-test-pass kind (audit 2026-07-10).
             return _receipt(claim, Verdict.UNSUPPORTED, e, note="accusation reserved for test-pass claims")
         run = _run_for(index, e)
+        # `run` is guaranteed by find_evidence (e was built from a run in this index), so the
+        # else is unreachable today — kept as an INTENTIONAL defensive fallback: if a future
+        # refactor ever decoupled them, this fails closed (a suppression reason -> UNSUPPORTED),
+        # never a crash or an accusation on the #1-non-negotiable path (audit 2026-07-10).
         guard = ev.accusation_guard(index, claim, run) if run else "red run not found in index"
         if guard:
             return _receipt(claim, Verdict.UNSUPPORTED, e, note=guard)
