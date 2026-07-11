@@ -1,6 +1,13 @@
-# did-it
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/did-it-lockup-dark.svg">
+    <img alt="did-it" src="brand/did-it-lockup.svg" width="420">
+  </picture>
+</p>
 
-[![CI](https://github.com/ErickShepherd/did-it/actions/workflows/ci.yml/badge.svg)](https://github.com/ErickShepherd/did-it/actions/workflows/ci.yml)
+<p align="center">
+  <a href="https://github.com/ErickShepherd/did-it/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ErickShepherd/did-it/actions/workflows/ci.yml/badge.svg"></a>
+</p>
 
 Mechanically check whether an AI coding agent's natural-language claims — "I ran the tests and they
 pass", "I created the file", "the suite is green" — match what its **Claude Code session actually did**,
