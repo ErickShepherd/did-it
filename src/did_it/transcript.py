@@ -41,9 +41,16 @@ class ParseFailure(Exception):
 
 def _version_tuple(v: str) -> tuple[int, int, int] | None:
     parts = v.split(".")
-    if len(parts) != 3 or not all(p.isdigit() for p in parts):
+    if len(parts) != 3:
         return None
-    return (int(parts[0]), int(parts[1]), int(parts[2]))
+    try:
+        return (int(parts[0]), int(parts[1]), int(parts[2]))
+    except ValueError:
+        # Fail closed to "unsupported", never crash. The old `str.isdigit()` gate accepted
+        # Unicode digits (`'²'.isdigit()` is True) that int() rejects, and even `.isdecimal()`
+        # would not stop a huge all-decimal part from tripping int()'s int_max_str_digits
+        # limit — both raised an uncaught ValueError on a crafted version (audit 2026-07-10).
+        return None
 
 
 def is_supported_version(v: str) -> bool:

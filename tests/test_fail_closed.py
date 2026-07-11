@@ -45,6 +45,39 @@ class TestParseFailsClosedOnPathologicalJson:
         assert r.verdict == Verdict.NOT_EVALUABLE
 
 
+class TestVersionParsingFailsClosed:
+    """_version_tuple must fail closed to None (unsupported), never crash on a crafted version
+    (audit 2026-07-10, transcript.py:44-46). str.isdigit() accepted Unicode digits int()
+    rejects, and a huge all-decimal part trips int()'s int_max_str_digits limit.
+    """
+
+    def test_unicode_digit_version_returns_none_not_valueerror(self):
+        assert transcript._version_tuple("2.1.²") is None  # '²'.isdigit() is True
+        assert transcript.is_supported_version("2.1.²") is False
+
+    def test_huge_decimal_version_part_returns_none_not_valueerror(self):
+        assert transcript._version_tuple("2.1." + "1" * 5000) is None
+
+    def test_valid_version_still_parses(self):
+        assert transcript._version_tuple("2.1.204") == (2, 1, 204)
+
+    def test_crafted_version_record_is_unknownschema_not_a_crash(self, tmp_path):
+        import json
+
+        p = tmp_path / "t.jsonl"
+        rec = {
+            "type": "assistant",
+            "uuid": "fx-ver",
+            "parentUuid": None,
+            "version": "2.1.²",
+            "isSidechain": False,
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "hi"}]},
+        }
+        p.write_text(json.dumps(rec) + "\n")
+        with pytest.raises(transcript.UnknownSchema):
+            transcript.parse(p)
+
+
 def verdict_of(receipts, fragment):
     (r,) = [x for x in receipts if fragment in x.claim_text]
     return r.verdict
