@@ -49,7 +49,8 @@ Exit code is non-zero **only** on `CONTRADICTED`, so it drops into CI or a Claud
 - **`--verify` executes only what it can trust.** The optional `--verify <repo>` re-runs a green claim's
   own test command to upgrade `BACKED-transcript` → `BACKED-verified`. The command string is untrusted
   transcript input, so it runs **only if it is a single pure test-runner invocation** — no shell chaining,
-  redirection, substitution, or env prefix — executed as argv with `shell=False` under a timeout. It is
+  redirection, substitution, or env prefix; every path (the runner *and* its arguments) confined to the repo
+  tree; code/config/plugin-loading options refused — executed as argv with `shell=False` under a timeout. It is
   **upgrade-only**: a failing, flaky, or timed-out re-run is never an accusation (the repo may have drifted
   since the claim), so it stays `BACKED-transcript`. Opt-in; never runs in the Stop hook.
 

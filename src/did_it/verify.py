@@ -34,6 +34,26 @@ _UNSAFE = re.compile(r"[;|&<>$`(){}\n\r\\]")
 _ENV_PREFIX = re.compile(r"^\s*\w+=")
 _MAX_LEN = 4096
 
+#: Runner options that load code / config / plugins by name or path — the vector past a
+#: confined argv[0] (e.g. `pytest --pyargs evilpkg`, `pytest -p evilplugin`, `go test -exec`).
+#: Refused regardless of value; honest "run the tests" commands don't use them.
+_CODE_LOADER_OPTS = frozenset({
+    "-p", "--plugin", "--pyargs", "-c", "--config", "--rootdir", "--confcutdir",
+    "-o", "--override-ini", "--import-mode", "--manifest-path", "-exec", "-toolexec",
+    "-r", "--require",
+})
+
+
+def _escapes_repo(token: str) -> bool:
+    """True if a token (or its `=value`) points OUTSIDE the repo: absolute, `..`, or `~`.
+
+    A test runner treats a path argument as code to import (pytest loads `conftest.py` from a
+    path/rootdir at collection time), so an out-of-repo path arg executes out-of-repo code even
+    behind a confined argv[0]. In-repo relative paths are the repo's own code — already trusted.
+    """
+    value = token.split("=", 1)[1] if token.startswith("-") and "=" in token else token
+    return os.path.isabs(value) or value.startswith("~") or ".." in value.split("/")
+
 _DEFAULT_RUNS = 2          # >1 so a flaky pass is caught rather than upgraded
 _DEFAULT_TIMEOUT = 300.0   # seconds; a hung re-run errors out, never blocks or upgrades
 
@@ -63,15 +83,15 @@ def is_verifiable_command(command: str) -> bool:
         return False
     if not argv:
         return False
-    # Confine the exec target to the repo tree or a PATH-resolved bare name. The reader's
-    # runner pattern allows a path prefix on argv[0] (`(?:\S*/)?pytest`), so without this an
-    # untrusted transcript could name a binary OUTSIDE the repo the user pointed --verify at
-    # (`/tmp/x/pytest`, `../../usr/bin/pytest`) — a real escape (review round 1). A bare name
-    # resolves via the user's PATH; an in-repo relative path (`.venv/bin/python`, `bin/pytest`)
-    # is the same trust as the repo's own test code, which any test run executes anyway.
-    exe = argv[0]
-    if os.path.isabs(exe) or exe.startswith("~") or ".." in exe.split("/"):
-        return False
+    # Confine EVERY token to the repo tree (or a PATH-resolved bare name), not just argv[0]:
+    # the reader's runner pattern allows a path prefix (`(?:\S*/)?pytest`) AND a runner
+    # argument can point collection/config at out-of-repo code (review rounds 1–2). A bare
+    # name resolves via the user's PATH; an in-repo relative path (`.venv/bin/python`,
+    # `tests/foo.py`) is the repo's own code, which any test run executes anyway. Also refuse
+    # options that load code/config/plugins by name (`--pyargs`, `-p`, `-exec`, …).
+    for token in argv:
+        if _escapes_repo(token) or token.split("=", 1)[0] in _CODE_LOADER_OPTS:
+            return False
     # Same recognizer the outcome-reader uses: a runner at a command position, actually
     # executing tests. With no shell metacharacters present, that runner is the whole command.
     return ev.is_test_command(command)

@@ -68,6 +68,30 @@ class TestValidatorRejects:
         for cmd in (".venv/bin/python -m pytest -q", ".venv/bin/pytest", "./pytest", "bin/pytest"):
             assert verify.is_verifiable_command(cmd), cmd
 
+    def test_rejects_out_of_repo_or_code_loading_arguments(self):
+        # argv[0] confinement is not enough: a runner ARGUMENT can point collection/config at
+        # out-of-repo code (pytest imports conftest.py from a path arg at collection time), or
+        # name code to load. Confinement must cover every token + refuse code-loading options.
+        for cmd in (
+            "python -m pytest /tmp/evil",            # path arg -> imports /tmp/evil/conftest.py
+            "pytest /abs/dir",
+            "pytest ../evil",
+            "pytest --rootdir=/tmp/evil",            # glued =value escapes
+            "pytest --rootdir /tmp/evil",            # separated value escapes
+            "python -m pytest --pyargs evilpkg",     # name-based module load
+            "pytest -p evilplugin",                  # plugin load
+            "pytest -c /tmp/evil.ini",
+            "cargo test --manifest-path=/tmp/evil/Cargo.toml",
+            "go test -exec /tmp/evil ./...",
+        ):
+            assert not verify.is_verifiable_command(cmd), cmd
+
+    def test_still_accepts_ordinary_test_arguments(self):
+        for cmd in ("pytest -q tests/test_foo.py", "pytest -k expr", "pytest tests/",
+                    "pytest --maxfail=1 -q", "pytest tests/test_a.py::test_b",
+                    "python -m pytest -q", "go test ./...", "cargo test"):
+            assert verify.is_verifiable_command(cmd), cmd
+
 
 class TestExecutorAggregation:
     """run_command classifies across N runs without touching a real runner (subprocess mocked)."""

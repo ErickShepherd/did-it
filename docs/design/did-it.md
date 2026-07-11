@@ -64,8 +64,11 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
   `BACKED-transcript` → `BACKED-verified`. The command is untrusted transcript input, so it executes **only
   if it is a single pure test-runner invocation** — rejected on any shell control, redirection, substitution,
   or grouping character (chain/pipe/background, redirects, command/parameter substitution, subshells, braces,
-  backslash, newline) or a leading env-var prefix — run as argv with `shell=False` under a timeout (all
-  execution isolated in `verify.py`). It is **upgrade-only**: a red/flaky/errored/timed-out
+  backslash, newline) or a leading env-var prefix; **every token is confined to the repo tree** (no absolute,
+  `..`, or `~` path in argv[0] *or any argument* — else a runner arg like `pytest /tmp/evil` imports
+  out-of-repo `conftest.py` at collection time) and code/config/plugin-loading options (`--pyargs`, `-p`,
+  `-exec`, `--rootdir`, …) are refused. Run as argv with `shell=False` under a timeout (all execution
+  isolated in `verify.py`). It is **upgrade-only**: a red/flaky/errored/timed-out
   re-run is never `CONTRADICTED` (the repo may have drifted since utterance-time), so it stays
   `BACKED-transcript` with a note. Opt-in; never in the hot path / Stop hook. Flake guard: N runs (default 2),
   upgrade only if *all* green. Rejected alternatives: re-running the verbatim string *unvalidated* (executes
