@@ -330,3 +330,16 @@ def test_anchor_scan_aggregates_need_no_ack(monkeypatch, capsys):
     assert rc == 0
     assert "REFUSED" not in cap.err
     assert "LOCAL-ONLY" not in cap.out
+
+
+def test_session_builder_timestamps_stay_valid_and_monotonic_past_an_hour():
+    # counter//60 hit 60 at 3600 records -> "00:60:00", an invalid ISO timestamp (audit 2026-07-10).
+    from datetime import datetime
+
+    from did_it.testing import SessionBuilder
+
+    b = SessionBuilder()
+    for _ in range(3700):
+        b._next("assistant")
+    parsed = [datetime.strptime(r["timestamp"], "%Y-%m-%dT%H:%M:%S.000Z") for r in b.records]
+    assert all(parsed[i] < parsed[i + 1] for i in range(len(parsed) - 1))
