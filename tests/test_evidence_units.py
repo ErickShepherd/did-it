@@ -241,3 +241,17 @@ class TestFileCreatedPrepositionBoundary:
                         ("Wrote docs/notes.md with the release steps.", "docs/notes.md")]:
             c = self._classify(s)
             assert c is not None and c.kind == "file-created" and c.tokens[0] == path, s
+
+
+class TestNegativeGreenEvidenceLinkage:
+    """A negative claim on a green run (-> UNSUPPORTED) carries the same evidence linkage as its
+    sibling branches; the ref/tier were dropped before (audit 2026-07-10, reconcile.py:44)."""
+
+    def test_negative_claim_on_green_run_keeps_evidence_ref(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("2 tests still fail.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.UNSUPPORTED
+        assert r.evidence_ref is not None and r.evidence_tier == "witness"

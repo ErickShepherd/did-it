@@ -41,7 +41,8 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
         return _absent(claim, session, "no valid test run at utterance-time")
     if e.outcome == "green":
         if claim.polarity == "negative":
-            return _receipt(claim, Verdict.UNSUPPORTED, note="last test run was green")
+            # pass `e`: this receipt carries the same evidence linkage as its siblings (audit 2026-07-10)
+            return _receipt(claim, Verdict.UNSUPPORTED, e, note="last test run was green")
         run = _run_for(index, e)
         observed = ev.summary_passed_count(run) if run else None
         if claim.count is not None and observed is not None and observed != claim.count:
