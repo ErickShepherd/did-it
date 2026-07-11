@@ -461,3 +461,21 @@ class TestRenderSanitization:
         out = report.render([r])
         assert " " not in out
         assert " " not in out
+
+
+class TestUnmappedKindFailsClosed:
+    """An unmapped procedural claim kind fails closed to UNSUPPORTED, never a KeyError crash
+    (audit 2026-07-10, reconcile._BY_KIND). Unreachable today; defensive."""
+
+    def test_unmapped_kind_is_unsupported_not_keyerror(self, tmp_path):
+        from did_it import reconcile, transcript
+        from did_it.extraction import Claim
+
+        b = SessionBuilder()
+        b.user_text("hi")
+        b.assistant_text("done")
+        session = transcript.parse(b.write_jsonl(tmp_path / "t.jsonl"))
+        bogus = Claim(text="something happened", utterance_index=len(session.records),
+                      kind="bogus-future-kind", is_procedural=True)
+        (r,) = reconcile.reconcile([bogus], session)
+        assert r.verdict == Verdict.UNSUPPORTED

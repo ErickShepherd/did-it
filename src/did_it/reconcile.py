@@ -154,7 +154,14 @@ def reconcile(claims, session, *, verify_repo: str | None = None) -> list[Receip
         if not claim.is_procedural:
             receipts.append(_receipt(claim, Verdict.NOT_CHECKABLE, note="semantic claim (v1 non-goal)"))
             continue
-        receipts.append(_BY_KIND[claim.kind](claim, session, index))
+        handler = _BY_KIND.get(claim.kind)
+        if handler is None:
+            # An unmapped procedural kind fails CLOSED to UNSUPPORTED, never a KeyError crash
+            # (fail-loud) — currently unreachable, defensive per the fail-closed contract (audit
+            # 2026-07-10).
+            receipts.append(_receipt(claim, Verdict.UNSUPPORTED, note=f"unmapped procedural kind: {claim.kind!r}"))
+            continue
+        receipts.append(handler(claim, session, index))
     if verify_repo is not None:
         _apply_verification(zip(claims, receipts), index, verify_repo)
     return receipts
