@@ -131,7 +131,9 @@ def parse(path: str | Path) -> Session:
         if not isinstance(message, dict) or not isinstance(message.get("content"), (list, str)):
             raise ParseFailure(f"{path.name}:{lineno}: message without content")
 
-        if rec.get("isSidechain"):
+        if rec.get("isSidechain") is True:
+            # `is True`, not truthy: the JSON string "false" is truthy and would be mis-read as a
+            # sidechain (audit 2026-07-10). Real records carry a JSON boolean.
             session.used_subagents = True
             continue  # sidechain records are not ingested in v1 (D5)
 

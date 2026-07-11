@@ -479,3 +479,31 @@ class TestUnmappedKindFailsClosed:
                       kind="bogus-future-kind", is_procedural=True)
         (r,) = reconcile.reconcile([bogus], session)
         assert r.verdict == Verdict.UNSUPPORTED
+
+
+class TestSidechainFlagIsStrictBoolean:
+    """isSidechain is read with `is True`, not truthiness: the JSON string "false" must not be
+    mis-read as a sidechain (audit 2026-07-10, transcript.py)."""
+
+    def _rec(self, sidechain):
+        return {
+            "type": "assistant", "uuid": "fx", "parentUuid": None, "version": "2.1.204",
+            "isSidechain": sidechain,
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "hi"}]},
+        }
+
+    def test_string_false_is_not_a_sidechain(self, tmp_path):
+        import json
+        p = tmp_path / "t.jsonl"
+        p.write_text(json.dumps(self._rec("false")) + "\n")
+        session = transcript.parse(p)
+        assert session.used_subagents is False
+        assert len(session.records) == 1  # ingested, not skipped
+
+    def test_boolean_true_is_a_sidechain(self, tmp_path):
+        import json
+        p = tmp_path / "t.jsonl"
+        p.write_text(json.dumps(self._rec(True)) + "\n")
+        session = transcript.parse(p)
+        assert session.used_subagents is True
+        assert session.records == []  # skipped
