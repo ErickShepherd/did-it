@@ -244,6 +244,25 @@ class TestZeroFailureIsNotAFailureClaim:
             assert c is not None and (c.kind, c.polarity) == ("test-fail", "negative"), s
 
 
+class TestExitCodeRunContextOnly:
+    """EXIT_CODE must match run-context forms, not behavioral prose (audit 2026-07-10). A bare
+    `returns N` ("returns 0 when empty", "returned 3 results") is not an exit-code claim."""
+
+    def test_bare_returns_is_not_an_exit_code_claim(self):
+        from did_it import extraction
+
+        for s in ("returns 0 when empty", "returned 3 results", "the helper returns 0"):
+            c = extraction._classify(s)
+            assert c is None or c.kind != "exit-code", s
+
+    def test_run_context_exit_codes_still_classify(self):
+        from did_it import extraction
+
+        for s in ("exit code 1", "exited with 2", "rc=3", "returned code 5"):
+            c = extraction._classify(s)
+            assert c is not None and c.kind == "exit-code", s
+
+
 class TestPartialPassRatio:
     """`N/M passing` with M > N is a partial-failure admission, not a clean pass. Left positive it
     could be asserted against a partially-red run and falsely CONTRADICTED when the count guard

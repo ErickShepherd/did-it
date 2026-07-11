@@ -144,8 +144,11 @@ CHECK_PASS = re.compile(
     re.I,
 )
 
+#: `return(?:ed|s)?` REQUIRES a following `code`: bare "returns 0 when empty" / "returned 3
+#: results" are behavioral prose, not an exit-code claim (audit 2026-07-10). Run-context forms
+#: (exit/exited with/exit code, rc=, returned code N) still match.
 EXIT_CODE = re.compile(
-    r"\b(?:exit(?:ed|s)?(?:\s+with)?(?:\s+code)?|rc|return(?:ed|s)?(?:\s+code)?)"
+    r"\b(?:exit(?:ed|s)?(?:\s+with)?(?:\s+code)?|rc|return(?:ed|s)?\s+code)"
     r"\s*[=:]?\s*(?P<code>\d+)\b",
     re.I,
 )
