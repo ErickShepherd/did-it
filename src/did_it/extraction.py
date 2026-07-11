@@ -287,6 +287,13 @@ SKIP_LINE = re.compile(r"^\s*(?:#{1,6}\s|\||-{3,}\s*$|={3,}\s*$)")  # heading / 
 BULLET = re.compile(r"^\s*(?:[-*+•]|\d+[.)]|✅|❌|⚠️|✔|✗)\s+")
 SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z`\"'\d(])")
 
+#: Cap on a single sentence before classification. The lazy `[^.;]*?` scans in CHECK_PASS /
+#: FILE_CREATED (and the runner scans) are O(n^2) on a dotless multi-KB untrusted line (measured
+#: 3.8s at 32KB); a per-sentence cap bounds each scan and makes the total linear in the input.
+#: Real claim sentences are short — truncating a pathological one can at worst drop a claim that
+#: begins past the cap (lost coverage, never a false accusation) (audit 2026-07-10).
+_MAX_SENTENCE_CHARS = 2048
+
 
 def sentences(text: str) -> list[str]:
     """Deterministic markdown-aware sentence segmentation of one assistant text block."""
@@ -301,7 +308,7 @@ def sentences(text: str) -> list[str]:
         line = BULLET.sub("", line).strip()
         if not line:
             continue
-        out.extend(s.strip() for s in SENT_SPLIT.split(line) if s.strip())
+        out.extend(s.strip()[:_MAX_SENTENCE_CHARS] for s in SENT_SPLIT.split(line) if s.strip())
     return out
 
 

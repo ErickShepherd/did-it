@@ -358,6 +358,27 @@ class TestPathologicalCommands:
         assert time.monotonic() - t0 < 2.0
 
 
+class TestPathologicalProse:
+    def test_dotless_multi_kb_prose_line_adjudicates_quickly(self, tmp_path):
+        # CHECK_PASS/FILE_CREATED lazy `[^.;]*?` scans were O(n^2) on a dotless multi-KB
+        # assistant line (3.8s at 32KB -> minutes larger); the per-sentence cap bounds them
+        # (audit 2026-07-10). A real claim is short, so the cap never drops one.
+        b = SessionBuilder()
+        b.user_text("status")
+        b.assistant_text("ruff " + "a" * 50_000)  # dotless, no terminator, ~50KB
+        t0 = time.monotonic()
+        did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert time.monotonic() - t0 < 2.0
+
+    def test_short_check_pass_claim_still_classifies(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("lint")
+        b.bash("ruff check src", "All checks passed!")
+        b.assistant_text("ruff is clean.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ruff is clean") == Verdict.BACKED_TRANSCRIPT
+
+
 class TestOperatorFloodCommands:
     def test_chain_operator_flood_adjudicates_quickly_and_abstains(self, tmp_path):
         # TEST_RUNNERS anchors at every chain operator and greedily scans from each — an
