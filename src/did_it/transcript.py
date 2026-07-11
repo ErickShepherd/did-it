@@ -30,6 +30,12 @@ SUPPORTED_SCHEMA_VERSIONS: tuple[str, ...] = ("2.1.156", "2.1.205")
 
 MESSAGE_TYPES = frozenset({"assistant", "user"})
 
+#: Byte cap on a transcript file, checked (via stat) BEFORE the whole-file read. `read_text`
+#: + `.split("\n")` holds ~2x the file in memory, so an uncapped GB-scale `.jsonl` raised an
+#: uncaught MemoryError — the huge-file DoS the threat model names (audit 2026-07-10). 256 MiB
+#: is ~2.5x the largest real transcripts observed while still bounding peak memory.
+_MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024
+
 
 class UnknownSchema(Exception):
     """Raised when a transcript's schema is outside the validated range (-> NOT-EVALUABLE)."""
@@ -84,6 +90,10 @@ def parse(path: str | Path) -> Session:
     to the CLI as a usage error. Never silently drops an unreadable message line.
     """
     path = Path(path)
+    size = path.stat().st_size  # OSError (missing/unreadable) propagates as a usage error
+    if size > _MAX_TRANSCRIPT_BYTES:
+        # Fail closed BEFORE the whole-file read, so a huge file is NOT-EVALUABLE, not a crash.
+        raise ParseFailure(f"{path.name}: {size} bytes exceeds the {_MAX_TRANSCRIPT_BYTES}-byte cap")
     session = Session(path=path)
     try:
         # split("\n"), NOT splitlines(): U+2028/U+2029/NEL are legal UNESCAPED inside JSON

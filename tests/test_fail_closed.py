@@ -45,6 +45,37 @@ class TestParseFailsClosedOnPathologicalJson:
         assert r.verdict == Verdict.NOT_EVALUABLE
 
 
+class TestTranscriptSizeCap:
+    """A GB-scale .jsonl must fail closed (ParseFailure) BEFORE the whole-file read, not crash
+    with MemoryError (audit 2026-07-10, transcript.py:86). The cap is checked via stat, so the
+    test shrinks the cap rather than writing a giant file.
+    """
+
+    def _valid_session_file(self, tmp_path) -> Path:
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("All 12 tests pass.")
+        return b.write_jsonl(tmp_path / "t.jsonl")
+
+    def test_oversize_file_is_parsefailure(self, tmp_path, monkeypatch):
+        p = self._valid_session_file(tmp_path)
+        monkeypatch.setattr(transcript, "_MAX_TRANSCRIPT_BYTES", 10)  # below the file size
+        with pytest.raises(transcript.ParseFailure, match="exceeds"):
+            transcript.parse(p)
+
+    def test_file_under_cap_still_parses(self, tmp_path):
+        # Positive control: a normal file (well under the real 256 MiB cap) parses fine.
+        session = transcript.parse(self._valid_session_file(tmp_path))
+        assert session.records  # parsed at least one message record
+
+    def test_oversize_file_is_not_evaluable_end_to_end(self, tmp_path, monkeypatch):
+        p = self._valid_session_file(tmp_path)
+        monkeypatch.setattr(transcript, "_MAX_TRANSCRIPT_BYTES", 10)
+        (r,) = did_it.check(p)
+        assert r.verdict == Verdict.NOT_EVALUABLE
+
+
 class TestVersionParsingFailsClosed:
     """_version_tuple must fail closed to None (unsupported), never crash on a crafted version
     (audit 2026-07-10, transcript.py:44-46). str.isdigit() accepted Unicode digits int()
