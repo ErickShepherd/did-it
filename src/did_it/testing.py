@@ -18,7 +18,7 @@ DEFAULT_VERSION = "2.1.204"
 FIXTURE_CWD = "/work/toy-repo"  # fabricated; leak-gate denies real home paths
 #: Deterministic base for fabricated timestamps; each record is +1s (see _next). A fixed base +
 #: timedelta keeps timestamps VALID and MONOTONIC past 60 records/min — the old `HH:00` +
-#: `counter//60`/`counter%60` produced `00:60:00` at counter 3600 (audit 2026-07-10).
+#: `counter//60`/`counter%60` produced `00:60:00` at counter 3600.
 _TS_EPOCH = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 

@@ -3,7 +3,7 @@
 Design: docs/design/did-it.md — D5 (sidechains -> v1.1), Risks (schema drift), "NOT-EVALUABLE".
 Hard rule: an unknown or partially-parsed schema fails CLOSED to NOT-EVALUABLE, never to a verdict.
 
-Schema notes (measured on real transcripts, spike 2026-07-09 + build-time recon):
+Schema notes (measured on real transcripts):
   * One JSON object per line. Message records have type "assistant" / "user"; other types
     (queue-operation, ai-title, file-history-snapshot, attachment, system, ...) are skipped.
   * Message records carry a per-record `version` (Claude Code release). Core fields
@@ -20,9 +20,9 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-#: Inclusive range of Claude Code schema versions this build is validated against. The spike
-#: parsed 10 distinct versions across 2.1.156-2.1.204 with one parser; 2.1.205 verified at
-#: build time. Outside this range -> UnknownSchema -> NOT-EVALUABLE (never guess).
+#: Inclusive range of Claude Code schema versions this build is validated against. Ten distinct
+#: versions across 2.1.156-2.1.204 were parsed with one parser; 2.1.205 verified separately.
+#: Outside this range -> UnknownSchema -> NOT-EVALUABLE (never guess).
 SUPPORTED_SCHEMA_RANGE: tuple[tuple[int, int, int], tuple[int, int, int]] = ((2, 1, 156), (2, 1, 205))
 
 #: Endpoints of the validated range (scaffold-API compatibility).
@@ -32,7 +32,7 @@ MESSAGE_TYPES = frozenset({"assistant", "user"})
 
 #: Byte cap on a transcript file, checked (via stat) BEFORE the whole-file read. `read_text`
 #: + `.split("\n")` holds ~2x the file in memory, so an uncapped GB-scale `.jsonl` raised an
-#: uncaught MemoryError — the huge-file DoS the threat model names (audit 2026-07-10). 256 MiB
+#: uncaught MemoryError — the huge-file DoS the threat model names. 256 MiB
 #: is ~2.5x the largest real transcripts observed while still bounding peak memory.
 _MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024
 
@@ -55,7 +55,7 @@ def _version_tuple(v: str) -> tuple[int, int, int] | None:
         # Fail closed to "unsupported", never crash. The old `str.isdigit()` gate accepted
         # Unicode digits (`'²'.isdigit()` is True) that int() rejects, and even `.isdecimal()`
         # would not stop a huge all-decimal part from tripping int()'s int_max_str_digits
-        # limit — both raised an uncaught ValueError on a crafted version (audit 2026-07-10).
+        # limit — both raised an uncaught ValueError on a crafted version.
         return None
 
 
@@ -79,7 +79,7 @@ class Session:
     def content_blocks(self, index: int) -> list[dict]:
         """The message content blocks of record `index` ([] if malformed)."""
         m = self.records[index].get("message")
-        # Delegate the trust-sensitive block filter to _blocks so the two can't drift (audit 2026-07-10).
+        # Delegate the trust-sensitive block filter to _blocks so the two can't drift.
         return _blocks(m) if isinstance(m, dict) else []
 
 
@@ -103,7 +103,7 @@ def parse(path: str | Path) -> Session:
         lines = path.read_text(encoding="utf-8").split("\n")
     except UnicodeDecodeError as e:
         # Byte-corrupt input is NOT-EVALUABLE, never a crash: an escaped exception exits
-        # the CLI with 1 — the code reserved for CONTRADICTED (panel 2026-07-10, C3).
+        # the CLI with 1 — the code reserved for CONTRADICTED.
         raise ParseFailure(f"{path.name}: not valid UTF-8") from e
     for lineno, line in enumerate(lines, 1):
         if not line.strip():
@@ -113,7 +113,7 @@ def parse(path: str | Path) -> Session:
         except (ValueError, RecursionError) as e:
             # JSONDecodeError (a ValueError subclass) is the common case; two adversarial-but-
             # tiny inputs raise siblings that escaped the old narrow catch and violated
-            # fail-closed (audit 2026-07-10): a huge integer literal hits int()'s
+            # fail-closed: a huge integer literal hits int()'s
             # int_max_str_digits limit (ValueError), and ~200KB of nested brackets overflows
             # the JSON C decoder (RecursionError). Both must be NOT-EVALUABLE, never a crash.
             raise ParseFailure(f"{path.name}:{lineno}: unparseable line") from e
@@ -133,7 +133,7 @@ def parse(path: str | Path) -> Session:
 
         if rec.get("isSidechain") is True:
             # `is True`, not truthy: the JSON string "false" is truthy and would be mis-read as a
-            # sidechain (audit 2026-07-10). Real records carry a JSON boolean.
+            # sidechain. Real records carry a JSON boolean.
             session.used_subagents = True
             continue  # sidechain records are not ingested in v1 (D5)
 

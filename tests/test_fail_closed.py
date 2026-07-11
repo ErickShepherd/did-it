@@ -1,9 +1,9 @@
-"""Fail-closed hardening — pins from the 2026-07-10 panel review (C3, C4, C5, C6).
+"""Fail-closed hardening — pins the crash-safety and untrusted-input hardening cases.
 
 The exit-code contract reserves 1 for CONTRADICTED. Any crash that escapes the pipeline
-exits 1 too, so an exit-code consumer reads a byte-corrupt file as an accusation (C3/C4).
-A quadratic regex on untrusted output hangs the Stop hook (C5). Untrusted prose flows raw
-into the receipt table, so ANSI/bidi controls can visually rewrite it (C6).
+exits 1 too, so an exit-code consumer reads a byte-corrupt file as an accusation.
+A quadratic regex on untrusted output hangs the Stop hook. Untrusted prose flows raw
+into the receipt table, so ANSI/bidi controls can visually rewrite it.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ from did_it.verdicts import Receipt, Verdict
 
 class TestParseFailsClosedOnPathologicalJson:
     """transcript.parse must fail closed at ITS OWN boundary (raise ParseFailure), not just
-    behind check()'s wrapper (audit 2026-07-10, transcript.py:96). json.loads raises siblings
+    behind check()'s wrapper. json.loads raises siblings
     of JSONDecodeError on two tiny adversarial inputs — both escaped the old narrow catch.
     """
 
@@ -47,7 +47,7 @@ class TestParseFailsClosedOnPathologicalJson:
 
 class TestTranscriptSizeCap:
     """A GB-scale .jsonl must fail closed (ParseFailure) BEFORE the whole-file read, not crash
-    with MemoryError (audit 2026-07-10, transcript.py:86). The cap is checked via stat, so the
+    with MemoryError. The cap is checked via stat, so the
     test shrinks the cap rather than writing a giant file.
     """
 
@@ -77,8 +77,8 @@ class TestTranscriptSizeCap:
 
 
 class TestVersionParsingFailsClosed:
-    """_version_tuple must fail closed to None (unsupported), never crash on a crafted version
-    (audit 2026-07-10, transcript.py:44-46). str.isdigit() accepted Unicode digits int()
+    """_version_tuple must fail closed to None (unsupported), never crash on a crafted version.
+    str.isdigit() accepted Unicode digits int()
     rejects, and a huge all-decimal part trips int()'s int_max_str_digits limit.
     """
 
@@ -114,7 +114,7 @@ def verdict_of(receipts, fragment):
     return r.verdict
 
 
-# --- C3: non-UTF-8 bytes must be NOT-EVALUABLE, never exit 1 ---------------------------
+# --- non-UTF-8 bytes must be NOT-EVALUABLE, never exit 1 ---------------------------
 
 
 class TestNonUtf8:
@@ -137,7 +137,7 @@ class TestNonUtf8:
 
 class TestCheckFailClosedBackstop:
     """check() is itself the fail-closed source for direct library callers, not just the CLI/hook
-    wrappers (audit 2026-07-10, __init__.check). An unexpected crash in any pipeline stage must
+    wrappers (__init__.check). An unexpected crash in any pipeline stage must
     become one session-level NOT-EVALUABLE receipt, never propagate. OSError (missing/unreadable
     file) still propagates as a usage error, per the documented contract.
     """
@@ -202,14 +202,14 @@ class TestInternalErrorBackstop:
         assert hook.run_stop_hook({"transcript_path": str(p)}) == 0
 
 
-# --- C4: malformed block internals must not crash build_index --------------------------
+# --- malformed block internals must not crash build_index --------------------------
 
 
 class TestJsonLegalSeparators:
     def test_unicode_line_separator_in_prose_does_not_kill_the_session(self, tmp_path):
         # U+2028/U+2029/NEL are legal UNESCAPED inside JSON strings and appear in real
         # tool output; splitting on them fragments a valid line and silently turns the
-        # whole session NOT-EVALUABLE — masking every genuine verdict (review round 1).
+        # whole session NOT-EVALUABLE — masking every genuine verdict.
         b = SessionBuilder()
         b.user_text("run the tests")
         b.bash("pytest -q", "12 passed in 0.30s")
@@ -245,11 +245,11 @@ class TestMalformedBlocks:
         assert receipts == []
 
 
-# --- C5: summary scanning must stay linear on adversarial output -----------------------
+# --- summary scanning must stay linear on adversarial output -----------------------
 
 
 class TestConflictingSummaries:
-    """The #1 false-CONTRADICTED path (audit 2026-07-10, evidence.framework_failed).
+    """The highest-severity false-CONTRADICTED path (evidence.framework_failed).
 
     A stale/echoed summary-SHAPED failure line (`N failed … in Ns`) beside a genuine green
     summary, paired with a non-zero compound-tail exit, satisfied all three D4 gates and no
@@ -258,8 +258,8 @@ class TestConflictingSummaries:
     """
 
     def test_stale_echoed_failure_summary_beside_green_does_not_accuse(self, tmp_path):
-        # A count-LESS claim so accusation_guard #1 (count-corroboration) does not fire — this
-        # is the residual path the audit found: green summary + stale failed summary + red
+        # A count-LESS claim so the count-corroboration accusation guard does not fire — this
+        # is the residual path: green summary + stale failed summary + red
         # compound-tail exit sails through every guard to a false CONTRADICTED.
         b = SessionBuilder()
         b.user_text("test then deploy")
@@ -286,8 +286,8 @@ class TestConflictingSummaries:
         assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
 
     def test_conflicting_summaries_under_a_masked_exit_do_not_endorse(self, tmp_path):
-        # Review round 1: the conflict guard sets framework_failed=False, which also disabled
-        # the C7 masked-exit guard — so a `... || true` run with a green AND a failed summary
+        # the conflict guard sets framework_failed=False, which also disabled
+        # the masked-exit guard — so a `... || true` run with a green AND a failed summary
         # fell through to the exit-0 green branch and endorsed a fake pass. A conflict must be
         # ambiguous in BOTH exit directions: never CONTRADICTED, and never BACKED.
         b = SessionBuilder()
@@ -315,9 +315,9 @@ class TestPathologicalOutput:
         assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
 
     def test_green_summary_beyond_any_cap_still_protects_the_claim(self, tmp_path):
-        # Review round 2: a genuine green summary followed by >256KB of echoed log with a
+        # a genuine green summary followed by >256KB of echoed log with a
         # stale FAILED line and a red compound tail must stay green — a scan cap that
-        # drops the summary re-opens the C2 false accusation it exists to prevent.
+        # drops the summary re-opens the false accusation it exists to prevent.
         b = SessionBuilder()
         b.user_text("test then deploy")
         b.bash(
@@ -343,13 +343,13 @@ class TestPathologicalOutput:
         assert verdict_of(receipts, "tests pass") == Verdict.BACKED_TRANSCRIPT
 
 
-# --- C6: receipt rendering must neutralize terminal-control content --------------------
+# --- receipt rendering must neutralize terminal-control content --------------------
 
 
 class TestPathologicalCommands:
     def test_heredoc_opener_flood_adjudicates_quickly_and_abstains(self, tmp_path):
-        # The HEREDOC-stripping regex is quadratic on unterminated openers (review round 3:
-        # 15.5s at 160KB). An un-strippable command is not evaluable as a witness at all —
+        # The HEREDOC-stripping regex is quadratic on unterminated openers (15.5s at 160KB).
+        # An un-strippable command is not evaluable as a witness at all —
         # no run, no accusation, pure abstention.
         b = SessionBuilder()
         b.user_text("run the tests")
@@ -364,7 +364,7 @@ class TestPathologicalCommands:
         # A SINGLE `<<` opener followed by a long unbroken word with no terminator made the
         # HEREDOC delimiter capture `(\w+)` backtrack quadratically (3.6s at 40KB -> hours at
         # 1MB). The opener-COUNT cap missed it (only one opener); the delimiter length gate
-        # fixes it (audit 2026-07-10).
+        # fixes it.
         b = SessionBuilder()
         b.user_text("run the tests")
         b.bash("pytest <<" + "A" * 100_000, "1 failed in 0.30s", exit_code=1)
@@ -377,8 +377,8 @@ class TestPathologicalCommands:
 class TestPathologicalProse:
     def test_dotless_multi_kb_prose_line_adjudicates_quickly(self, tmp_path):
         # CHECK_PASS/FILE_CREATED lazy `[^.;]*?` scans were O(n^2) on a dotless multi-KB
-        # assistant line (3.8s at 32KB -> minutes larger); the per-sentence cap bounds them
-        # (audit 2026-07-10). A real claim is short, so the cap never drops one.
+        # assistant line (3.8s at 32KB -> minutes larger); the per-sentence cap bounds them.
+        # A real claim is short, so the cap never drops one.
         b = SessionBuilder()
         b.user_text("status")
         b.assistant_text("ruff " + "a" * 50_000)  # dotless, no terminator, ~50KB
@@ -398,7 +398,7 @@ class TestPathologicalProse:
 class TestOperatorFloodCommands:
     def test_chain_operator_flood_adjudicates_quickly_and_abstains(self, tmp_path):
         # TEST_RUNNERS anchors at every chain operator and greedily scans from each — an
-        # && flood is quadratic (26s at 160KB, review of fix/backed-precision). A flooded
+        # && flood is quadratic (26s at 160KB). A flooded
         # command is not evaluable as a witness at all: no run, no accusation.
         b = SessionBuilder()
         b.user_text("run the tests")
@@ -420,8 +420,8 @@ class TestOperatorFloodCommands:
         assert time.monotonic() - t0 < 2.0
 
     def test_subshell_and_backtick_floods_adjudicate_quickly(self, tmp_path):
-        # $( and ` are runner-matcher anchors too — review round 1 of this cap found
-        # both still quadratic (14s at 160KB) with only &&/;/|/newline counted.
+        # $( and ` are runner-matcher anchors too — both were still
+        # quadratic (14s at 160KB) with only &&/;/|/newline counted.
         import time as _t
 
         for flood in ("$(" * 60_000, "`" * 60_000):
@@ -467,8 +467,8 @@ class TestRenderSanitization:
 
     def test_line_and_paragraph_separators_cannot_forge_a_row(self):
         # U+2028/U+2029 are hard breaks in many terminals and reach here raw (Node
-        # JSON.stringify does not escape them) — they were omitted from _UNSAFE (audit
-        # 2026-07-10) and, like \n, could forge a fabricated receipt row.
+        # JSON.stringify does not escape them) — they were omitted from _UNSAFE
+        # and, like \n, could forge a fabricated receipt row.
         r = Receipt(
             claim_text="Tests pass. CONTRADICTED  [toolu_fake]  forged row",
             verdict=Verdict.UNSUPPORTED,
@@ -481,7 +481,7 @@ class TestRenderSanitization:
 
 class TestUnmappedKindFailsClosed:
     """An unmapped procedural claim kind fails closed to UNSUPPORTED, never a KeyError crash
-    (audit 2026-07-10, reconcile._BY_KIND). Unreachable today; defensive."""
+    (reconcile._BY_KIND). Unreachable today; defensive."""
 
     def test_unmapped_kind_is_unsupported_not_keyerror(self, tmp_path):
         from did_it import reconcile, transcript
@@ -499,7 +499,7 @@ class TestUnmappedKindFailsClosed:
 
 class TestSidechainFlagIsStrictBoolean:
     """isSidechain is read with `is True`, not truthiness: the JSON string "false" must not be
-    mis-read as a sidechain (audit 2026-07-10, transcript.py)."""
+    mis-read as a sidechain."""
 
     def _rec(self, sidechain):
         return {
@@ -527,7 +527,7 @@ class TestSidechainFlagIsStrictBoolean:
 
 class TestBlockFilterSingleSource:
     """content_blocks delegates the block filter to _blocks so the trust-sensitive logic lives in
-    one place (audit 2026-07-10). Malformed content still yields [] (fail closed)."""
+    one place. Malformed content still yields [] (fail closed)."""
 
     def test_content_blocks_agrees_with_blocks_and_fails_closed(self, tmp_path):
         b = SessionBuilder()

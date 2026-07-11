@@ -30,7 +30,7 @@ def run_stop_hook(payload: dict) -> int:
         receipts = did_it.check(path)
     except OSError:
         return 0  # a vanished transcript is not the agent's fault
-    except Exception:  # noqa: BLE001 — advisory: a crash must never block the stop (panel C3)
+    except Exception:  # noqa: BLE001 — advisory: a crash must never block the stop
         return 0
     print("did-it (advisory session receipt):")
     print(report.render(receipts), end="")

@@ -230,7 +230,7 @@ if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-q"]))
 
 
-# --- precision regressions from the real anchor (2026-07-10 calibration scan) --------
+# --- precision regressions found on real sessions ------------------------------------
 # All three patterns produced FALSE CONTRADICTED verdicts on real sessions: the trigger
 # trusted the compound command's exit code as the test run's exit code.
 
@@ -289,7 +289,7 @@ def test_echoed_runner_word_is_not_a_test_run(tmp_path):
 
 def test_non_test_tool_error_count_in_compound_output_is_not_a_failure_marker(tmp_path):
     # ruff's "Found 1 error (1 fixed…)" precedes a green pytest summary in the same compound
-    # run (real anchor case): the failure marker must come from the framework's summary line.
+    # run (a real session): the failure marker must come from the framework's summary line.
     b = SessionBuilder()
     b.user_text("lint, test, commit")
     b.bash(

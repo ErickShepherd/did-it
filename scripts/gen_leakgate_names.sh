@@ -4,7 +4,7 @@
 # hand and then REVIEW/PRUNE; it is NOT part of the leak-gate's runtime (the gate stays fast,
 # offline, and deterministic by reading only the static local file).
 #
-# Candidates come from your PRIVATE remotes and local clones — sources the audit loop must not
+# Candidates come from your PRIVATE remotes and local clones — sources an automated tool must not
 # invent. Review the output: drop over-broad names (a private repo literally named "api"/"utils"
 # would reject every fixture mentioning it) and ADD non-repo sensitive tokens the gate should also
 # block (employer/client names, internal codenames, product names) that no remote list contains.

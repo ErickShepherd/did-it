@@ -1,9 +1,9 @@
 """Evidence binding — locate the tool_use/tool_result events that ground (or contradict) a claim.
 
-Design: docs/design/did-it.md — "Approach" step 2. Reuses the evidence-tier idea from the conformance
-spine (an internal conformance checker): tiers are computed, never author-written,
-so they can't be forged. Evidence is indexed to utterance-time: a grounding run must fall at/before
-the claim AND after the last relevant edit (a post-run edit invalidates a prior outcome).
+Design: docs/design/did-it.md — "Approach" step 2. Reuses the evidence-tier idea from a sibling
+conformance-checking project: tiers are computed, never author-written, so they can't be forged.
+Evidence is indexed to utterance-time: a grounding run must fall at/before the claim AND after
+the last relevant edit (a post-run edit invalidates a prior outcome).
 
 The index is built once per session:
   * Run    — a completed Bash tool_use/tool_result pair, with the parsed exit code.
@@ -37,35 +37,35 @@ TEST_RUNNERS = re.compile(
 EXIT_CODE_SPAN = re.compile(r"^Exit code (\d+)", re.M)
 
 #: Quoted strings are stripped before runner-matching: a command that merely MENTIONS a runner
-#: (`echo "pytest passed"`) is not a test run. Heredoc bodies likewise (LOOP_LEARNINGS-style
-#: notes quoting a pytest invocation were the top phantom-run source in the real anchor).
+#: (`echo "pytest passed"`) is not a test run. Heredoc bodies likewise (notes that quote a
+#: runner invocation were the top phantom-run source in the real anchor).
 QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"")
 #: Heredoc delimiter length gate. `(\w+)` (unbounded) backtracks quadratically on a SINGLE `<<`
 #: followed by a long unbroken word with no terminator (3.6s at 40KB → hours at 1MB); the
-#: opener-COUNT cap below does not catch a one-opener payload (audit 2026-07-10). Real delimiters
+#: opener-COUNT cap below does not catch a one-opener payload. Real delimiters
 #: are short identifiers (EOF, PYEOF, …), so `{1,64}` bounds the backreference and the backtrack.
 _HEREDOC_DELIM_CAP = 64
 HEREDOC = re.compile(rf"<<-?\s*(['\"]?)(\w{{1,{_HEREDOC_DELIM_CAP}}})\1.*?^\2$", re.S | re.M)
 
 
-#: HEREDOC's lazy body scan is quadratic on unterminated `<<X` floods (review round 3 of
-#: the fail-closed branch: 15.5s at 160KB) — each opener scans to end-of-string. Capping
+#: HEREDOC's lazy body scan is quadratic on unterminated `<<X` floods (15.5s at 160KB) — each
+#: opener scans to end-of-string. Capping
 #: the OPENER COUNT bounds the total work to ~cap×len (a plain long command with few `<<`
 #: strips linearly). An opener-flooded command is treated as NOT a test command, so it is
-#: never a witness for OR against any claim. Caveat (that branch's round-4 review): this
+#: never a witness for OR against any claim. Caveat: this
 #: drop also removes a would-be GREEN witness from the conflicting-green guard, so on a
 #: crafted >64-opener green run the guard cannot suppress a later accusation — accepted
 #: as implausible input; do not widen the cap or the guards assuming the drop is free.
 _HEREDOC_OPENER_CAP = 64
 
 #: TEST_RUNNERS (and the tool-position matcher) anchor at every chain operator and line
-#: start, greedily scanning from each — an `&&`/newline flood is quadratic (26s at 160KB,
-#: independent review). Real compound commands carry a handful of separators; a flooded
+#: start, greedily scanning from each — an `&&`/newline flood is quadratic (26s at 160KB).
+#: Real compound commands carry a handful of separators; a flooded
 #: command is not evaluable as a witness (same abstain rationale as the heredoc cap).
 _CHAIN_SEP_CAP = 64
 
 #: Runner invocations that don't EXECUTE tests: their exit 0 carries no outcome evidence
-#: (`pytest --version` exit-0 endorsed "All 500 tests pass" — panel C7, probe P6c).
+#: (`pytest --version` exit-0 endorsed "All 500 tests pass").
 _NON_EXECUTING = re.compile(
     r"\s--?(?:version|help|h\b|collect-only|co\b|fixtures|markers|setup-only|setup-plan|list)\b"
 )
@@ -75,7 +75,7 @@ def _strippable(command: str) -> bool:
     """A command whose scan cost is bounded; anything else is never a witness (abstain).
 
     The count must cover EVERY anchor the runner/tool matchers key on — `$(` and backtick
-    floods hung identically until review round 1 of this cap flagged them.
+    floods hung identically until this cap covered them.
     """
     if command.count("<<") > _HEREDOC_OPENER_CAP:
         return False
@@ -94,7 +94,7 @@ def is_test_command(command: str) -> bool:
     A run is a test iff SOME sub-command both invokes a runner and is not a non-executing form
     (`--version`, `--collect-only`, …). `_NON_EXECUTING` is checked PER CLAUSE, not over the whole
     command, so an unrelated `--version` on a different sub-command (`pytest tests/ &&
-    node build.js --version`) no longer drops a real test run (audit 2026-07-10).
+    node build.js --version`) no longer drops a real test run.
     """
     if not _strippable(command):
         return False
@@ -103,7 +103,7 @@ def is_test_command(command: str) -> bool:
         for clause in re.split(r"&&|\|\||;|\|", _stripped(command))
     )
 
-#: Test-framework outcome markers, deliberately narrow (anchor calibration 2026-07-10: compound
+#: Test-framework outcome markers, deliberately narrow (anchor calibration: compound
 #: Bash commands make the command exit code an unreliable witness for the TEST outcome — three
 #: real sessions produced false CONTRADICTED from green-pytest-then-failing-tail / SIGPIPE /
 #: ruff's "Found 1 error (1 fixed)" sitting next to a green pytest summary). Counts are only
@@ -112,8 +112,8 @@ def is_test_command(command: str) -> bool:
 #: tool's error count may belong to a neighbouring sub-command.
 #: A summary line carries a count clause AND a duration clause (pytest), or the cargo
 #: marker. Matched PER LINE with independent linear searches — the previous single
-#: `^.*(...).*$` pattern backtracked quadratically on near-match floods (panel C5:
-#: 10s at 144KB, extrapolating to hours on a multi-MB untrusted tool_result).
+#: `^.*(...).*$` pattern backtracked quadratically on near-match floods (10s at 144KB,
+#: extrapolating to hours on a multi-MB untrusted tool_result).
 _SUMMARY_COUNTS = re.compile(r"\b\d[\d,]*\s+(?:passed|failed|errors?|skipped)\b")
 _SUMMARY_TIME = re.compile(r"\bin\s+[\d.]+s\b")
 _SUMMARY_CARGO = re.compile(r"\btest result: (?:ok|FAILED)\b")
@@ -124,7 +124,7 @@ _SUMMARY_CARGO = re.compile(r"\btest result: (?:ok|FAILED)\b")
 #: "N total" is the framework-authored anchor that distinguishes the summary
 #: line from an incidental "1 failed" in prose. The trailing `(?!\s+\w)` keeps it to jest's
 #: end-of-clause `N total` and off prose like "100 total records" (shrinks the incidental
-#: accusation surface — round-1 review). Still per-line, still exit-gated for accusal.
+#: accusation surface). Still per-line, still exit-gated for accusal.
 _SUMMARY_TOTAL = re.compile(r"\b\d[\d,]*\s+total\b(?!\s+\w)")
 #: go literacy (v1.1): go prints no counts — its summary is a package-result line
 #: `ok|FAIL <pkg> <t>s` (tab-separated), analogous to cargo's marker. The <pkg>+<duration>
@@ -141,8 +141,8 @@ FAILED_LINE = re.compile(r"^(?:FAILED|ERROR)\s+\S+::", re.M)
 
 def _is_summary_line(line: str) -> bool:
     # No length cap and no output truncation: every component search is linear, and any
-    # bound that can drop a genuine green summary re-opens the C2 false accusation
-    # (review round 2 demonstrated exactly that with a 256KB tail cap).
+    # bound that can drop a genuine green summary re-opens the false accusation
+    # (a 256KB tail cap does exactly that).
     return bool(
         (_SUMMARY_COUNTS.search(line) and (_SUMMARY_TIME.search(line) or _SUMMARY_TOTAL.search(line)))
         or _SUMMARY_CARGO.search(line)
@@ -171,7 +171,7 @@ class Run:
         The two framework summaries disagree, so neither can be trusted as THE outcome of
         this run — the canonical case is an echoed/cat'd stale CI log's `N failed … in Ns`
         summary sitting beside a real green summary. Abstain: never accuse, never assert
-        backed (audit 2026-07-10 — the #1 false-CONTRADICTED path). A single mixed line
+        backed (the false-CONTRADICTED path this guards). A single mixed line
         (`5 failed, 3 passed in 12.01s`) is a genuine partial failure, not a conflict: it
         carries no green-*only* summary line, so it still reads as framework_failed."""
         green = any(_PASSED_COUNT.search(ln) and not _FAILED_COUNT.search(ln) for ln in lines)
@@ -185,8 +185,8 @@ class Run:
         Per-test FAILED/ERROR lines count only when the output carries NO summary line at
         all (a truncated run). Next to a genuine summary they may be echoed content — a
         cat'd CI log's stale FAILED line beside a green summary produced a false
-        accusation (panel 2026-07-10, C2). Conflicting summaries (a green summary line AND a
-        separate failure-summary line) are ambiguous, never a failure marker (audit 2026-07-10)."""
+        accusation. Conflicting summaries (a green summary line AND a
+        separate failure-summary line) are ambiguous, never a failure marker."""
         lines = self._summary_lines()
         if lines:
             if self._summaries_conflict(lines):
@@ -199,7 +199,7 @@ class Run:
         """The test framework's own summary reported passes and no failures."""
         lines = self._summary_lines()
         if self._summaries_conflict(lines):
-            return False  # conflicting summaries → ambiguous, not backed (audit 2026-07-10)
+            return False  # conflicting summaries → ambiguous, not backed
         return any(_PASSED_COUNT.search(line) for line in lines) and not self.framework_failed
 
     @property
@@ -289,7 +289,7 @@ def build_index(session) -> Index:  # noqa: ANN001
                     continue
                 _, name, tool_input = use
                 if not isinstance(tool_input, dict):
-                    tool_input = {}  # malformed block internals fail closed, never crash (C4)
+                    tool_input = {}  # malformed block internals fail closed, never crash
                 output = _result_text(block.get("content"))
                 if name == "Bash":
                     command = str(tool_input.get("command") or "")
@@ -325,7 +325,7 @@ def build_index(session) -> Index:  # noqa: ANN001
 DOC_EXTENSIONS = frozenset({"md", "rst", "adoc", "org"})
 
 #: A run that executes documentation AS tests: for it, doc edits ARE outcome-relevant
-#: (panel 2026-07-10, seat-3: a red doctest run survived its own fix landing in README.md
+#: (a red doctest run survived its own fix landing in README.md
 #: and falsely accused the honest "green now" claim).
 DOCTEST_RUN = re.compile(r"doctest", re.I)
 
@@ -357,14 +357,14 @@ def classify_outcome(run: Run) -> tuple[str, str | None]:
     """(green / red / ambiguous, note) — the TEST outcome of one run, framework-first (D4).
 
     Exit 0 alone is green only when the framework's own summary shows no failures: a
-    masked exit (`pytest || true`) beside a visible red summary endorsed a fake pass-claim
-    (panel C7). Never an accusation either way — D4 requires a non-zero exit.
+    masked exit (`pytest || true`) beside a visible red summary endorsed a fake pass-claim.
+    Never an accusation either way — D4 requires a non-zero exit.
     """
     if run._summaries_conflict(run._summary_lines()):
         # Conflicting framework summaries (a green-only AND a separate failure-only line) are
         # untrustworthy in EITHER exit direction: framework_failed abstains to False on a
         # conflict, so without this a masked exit (`... || true`) would fall through to the
-        # exit-0 green branch and endorse a fake pass (audit 2026-07-10 review). Abstain.
+        # exit-0 green branch and endorse a fake pass. Abstain.
         return "ambiguous", "conflicting framework summaries; outcome not trustworthy"
     if run.exit_code == 0 and run.framework_failed:
         return "ambiguous", "exit 0 but the framework summary reports failures"
@@ -405,7 +405,7 @@ def find_evidence(index: Index, claim) -> Evidence | None:  # noqa: ANN001
     )
 
 
-# --- accusation guards (D4 refinements, panel 2026-07-10) -------------------------------
+# --- accusation guards (D4 refinements) ------------------------------------------------
 #
 # Evidence binding is scope-blind: the LAST test run adjudicates every pass-claim, whatever
 # suite it ran. Each guard below names an ambiguity that routes the red case to UNSUPPORTED;
@@ -434,8 +434,8 @@ _TARGET_FILE_TOKEN = re.compile(r"(\S{1,500}\.(?:py|rs|go|ts|tsx|js|jsx|rb|java|
 #: pytest -k/-m (separated OR glued: `-kfoo`), go test -run. Bare-word cargo/go name
 #: filters (`cargo test my_test`) are NOT recognized — known limitation, noted in D4a.
 #: The value stops at whitespace / the next flag when UNQUOTED (`bare`): the old class allowed a
-#: space, so `-k foo --verbose` swallowed `--verbose` and captured `verbose` as a bogus target
-#: (audit 2026-07-10). A QUOTED value keeps spaces (`-k "foo or bar"`) — dropping that support
+#: space, so `-k foo --verbose` swallowed `--verbose` and captured `verbose` as a bogus target.
+#: A QUOTED value keeps spaces (`-k "foo or bar"`) — dropping that support
 #: would stop recognizing a real targeted run and could un-suppress a false accusation.
 _TARGET_SELECT = re.compile(
     r"\s-(?:k|m|run)[= ]{0,8}"
@@ -494,7 +494,7 @@ def target_tokens(command: str) -> set[str]:
     for sel in _TARGET_SELECT.finditer(args[:_SELECT_SCAN_CAP]):
         # Selector operators (and/or/not) are excluded like generic segments below: they
         # appear in almost any claim, which would read as naming the target and
-        # un-suppress the accusation (false CONTRADICTED — review round 3).
+        # un-suppress the accusation (false CONTRADICTED).
         out.update(
             w for w in re.findall(r"\w+", sel.group("quoted") or sel.group("bare") or "")
             if len(w) >= 3 and w.lower() not in _GENERIC_TOKENS
@@ -522,7 +522,7 @@ def target_tokens(command: str) -> set[str]:
             out.add(f.group(1).rsplit("/", 1)[-1])
             if f.group(2):
                 # node ids get the same generic filter as the paths below — a class
-                # named `Test` is a substring of every honest claim (review round 4)
+                # named `Test` is a substring of every honest claim
                 out.update(
                     p for p in f.group(2).split("::")
                     if len(p) >= 3 and p.lower() not in _GENERIC_TOKENS
@@ -542,7 +542,7 @@ def _claim_names(text: str, tokens: set[str]) -> bool:
     return any(t.lower() in low for t in tokens if t)
 
 
-# --- claim-to-command binding (panel C7: substring matching endorsed non-runs) ----------
+# --- claim-to-command binding (substring matching endorsed non-runs) --------------------
 
 
 @functools.lru_cache(maxsize=256)

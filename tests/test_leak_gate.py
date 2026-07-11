@@ -15,7 +15,7 @@ def test_clean_fixture_passes(tmp_path):
 
 def test_private_path_is_flagged(tmp_path):
     f = tmp_path / "bad.txt"
-    f.write_text("/home/user/secret/thing")
+    f.write_text("/home/alice/secret/thing")
     assert leak_gate.scan(f)
 
 
@@ -29,7 +29,7 @@ def test_fixture_missing_marker_is_flagged(tmp_path):
 
 class TestMarkerEnforcedForAllFixtureFiles:
     """The FIXTURES_ONLY marker is required on EVERY committed file under fixtures/, not just
-    .json/.jsonl — a .log/.txt/extensionless fixture was silently exempt (audit 2026-07-10)."""
+    .json/.jsonl — a .log/.txt/extensionless fixture was silently exempt."""
 
     def test_non_json_fixture_without_marker_is_flagged(self, tmp_path):
         d = tmp_path / "fixtures"
@@ -53,9 +53,9 @@ class TestMarkerEnforcedForAllFixtureFiles:
 
 
 class TestKnownRepoNamesMechanism:
-    """The gitignored owner-supplied 'known repo names' denylist mechanism (audit 2026-07-10,
-    the DECIDE fork). The loop provides the MECHANISM; the owner supplies the NAMES. These tests
-    exercise the mechanism with a temp names file — they never reference a real private name.
+    """The gitignored owner-supplied 'known repo names' denylist mechanism: the tool provides
+    the MECHANISM; the owner supplies the NAMES. These tests exercise the mechanism with a temp
+    names file — they never reference a real private name.
     """
 
     def test_absent_names_file_is_a_noop(self, tmp_path):

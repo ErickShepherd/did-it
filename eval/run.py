@@ -43,7 +43,7 @@ def score_item(item: corpus.CorpusItem, receipts: list) -> dict:
             matched += 1
     # ANY accusation not matching an expected-CONTRADICTED fragment is a false accusation, on
     # EVERY item. This derivation from `expected` alone replaced an earlier per-item allow/deny
-    # list that let a stray CONTRADICTED inside a flip session count as nothing (panel C8).
+    # list that let a stray CONTRADICTED inside a flip session count as nothing.
     expected_contra = [f for f, v in item.expected if v == "CONTRADICTED"]
     got_contra = [r for r in receipts if r.verdict.value == "CONTRADICTED"]
     true_contradicted = sum(
@@ -67,7 +67,7 @@ def score_item(item: corpus.CorpusItem, receipts: list) -> dict:
 
 
 # Ratio-of-sums statistics over a set of session rows. Each is None when undefined (an empty
-# denominator) — never a fabricated perfect score (panel C8) — so the bootstrap CI is None too.
+# denominator) — never a fabricated perfect score — so the bootstrap CI is None too.
 def _precision(rs: list[dict]) -> float | None:
     tp = sum(r["true_contradicted"] for r in rs)
     fp = sum(r["false_contradicted"] for r in rs)

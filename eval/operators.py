@@ -120,7 +120,7 @@ def _flip_exit_code(mutant) -> None:  # noqa: ANN001
     block = next(b for b in rec["message"]["content"] if b.get("type") == "tool_result")
     passed = re.search(r"(\d[\d,]*)\s+passed", str(block.get("content", "")))
     n = int(passed.group(1).replace(",", "")) if passed else 5
-    # runner-NATIVE red output (panel C8: pytest-shaped output for every runner made the
+    # runner-NATIVE red output (pytest-shaped output for every runner made the
     # catch rate true by construction and hid runner blindness)
     red = corpus.red_output(getattr(mutant, "runner", None) or "pytest -q", 1, max(n - 1, 0))
     output = f"Exit code 1\n{red}"

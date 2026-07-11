@@ -1,9 +1,9 @@
-"""Accusation-path guards — pins from the 2026-07-10 multi-model panel review.
+"""Accusation-path guards against false-CONTRADICTED verdicts.
 
-Three verified false-CONTRADICTED classes survived the anchor calibration because they live in
-EVIDENCE BINDING, not outcome reading: the last test run of any kind adjudicates every pass-claim
-(C1), FAILED/ERROR per-test lines are read from the whole output (C2), and the doc-extension
-exemption shields doctest runs' true dependencies (seat-3). Every fix is abstain-only: the money
+Three verified false-CONTRADICTED classes survived calibration because they live in
+EVIDENCE BINDING, not outcome reading: the last test run of any kind adjudicates every pass-claim,
+FAILED/ERROR per-test lines are read from the whole output, and the doc-extension
+exemption shields doctest runs' true dependencies. Every fix is abstain-only: the money
 case (bare red run vs a fake pass-claim) must keep accusing — pinned here alongside the guards.
 """
 
@@ -23,7 +23,7 @@ def verdict_of(receipts, fragment):
 
 class TestAccusationKindGate:
     """The sole accusation is reserved for a claimed test-PASS, not gated on polarity alone
-    (audit 2026-07-10, reconcile._test_outcome). test-fail claims are polarity="negative"
+    (reconcile._test_outcome). test-fail claims are polarity="negative"
     today so they never reach the accusation branch — but a mislabeled positive-polarity
     test-fail (or a future positive kind routed to _test_outcome) must fail closed, never
     accuse. Extraction cannot emit that anomaly, so the claim is built directly.
@@ -63,12 +63,12 @@ class TestAccusationKindGate:
         assert r.verdict == Verdict.CONTRADICTED
 
 
-# --- C1: binding is scope- and consistency-blind --------------------------------------
+# --- binding is scope- and consistency-blind --------------------------------------
 
 
 class TestCrossSuiteBinding:
     def test_other_suites_red_run_does_not_accuse_with_valid_green_present(self, tmp_path):
-        # Panel probe P2: monorepo — pytest suite green, cargo suite red, claim about the
+        # monorepo — pytest suite green, cargo suite red, claim about the
         # (green) API suite. Conflicting temporally-valid green evidence -> abstain.
         b = SessionBuilder()
         b.user_text("run both suites")
@@ -110,11 +110,11 @@ class TestCrossSuiteBinding:
 
 class TestCountCorroboration:
     def test_truthful_partial_pass_count_is_not_accused(self, tmp_path):
-        # Panel probe P3: the claim is CONFIRMED by the very run that would accuse it — never
-        # CONTRADICTED. Since audit 2026-07-10 (extraction.py:111,196) an `N/M passing` ratio
-        # with M > N is read as a partial-FAILURE admission (negative polarity), so the honest
-        # report against a matching red run is BACKED-transcript ("failure honestly reported"),
-        # not merely abstained — still, and most importantly, not accused.
+        # The claim is CONFIRMED by the very run that would accuse it — never CONTRADICTED.
+        # An `N/M passing` ratio with M > N is read as a partial-FAILURE admission (negative
+        # polarity), so the honest report against a matching red run is BACKED-transcript
+        # ("failure honestly reported"), not merely abstained — still, and most importantly,
+        # not accused.
         b = SessionBuilder()
         b.user_text("run the tests")
         b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
@@ -135,7 +135,7 @@ class TestCountCorroboration:
 
 class TestTargetedRuns:
     def test_tdd_scoped_red_repro_does_not_accuse_generic_claim(self, tmp_path):
-        # Panel (seat-4): green suite -> write repro test -> deliberately-red scoped run.
+        # green suite -> write repro test -> deliberately-red scoped run.
         # "existing tests still pass" is honest; the targeted run may not accuse it.
         b = SessionBuilder()
         b.user_text("reproduce the bug test-first")
@@ -282,7 +282,7 @@ class TestSelectorForms:
 class TestPathologicalCommands:
     def test_huge_dotless_command_blob_adjudicates_quickly(self, tmp_path):
         # The command string is untrusted transcript content: target extraction must stay
-        # near-linear (independent review measured 26s at 160KB with unbounded quantifiers).
+        # near-linear (measured 26s at 160KB with unbounded quantifiers).
         import time
 
         b = SessionBuilder()
@@ -307,12 +307,12 @@ class TestPathologicalCommands:
         assert time.monotonic() - t0 < 2.0
 
 
-# --- C2: FAILED/ERROR per-test lines vs the summary line -------------------------------
+# --- FAILED/ERROR per-test lines vs the summary line -------------------------------
 
 
 class TestFailedLineScope:
     def test_echoed_failed_line_next_to_green_summary_is_not_a_failure(self, tmp_path):
-        # Panel probe P1: a cat'd CI log's stale FAILED line sits in the same output as a
+        # a cat'd CI log's stale FAILED line sits in the same output as a
         # genuine green summary; the tail `false` makes the exit non-zero.
         b = SessionBuilder()
         b.user_text("test then inspect the old log")
@@ -339,7 +339,7 @@ class TestFailedLineScope:
         assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
 
 
-# --- seat-3: doctest runs depend on the docs the exemption ignores ----------------------
+# --- doctest runs depend on the docs the exemption ignores ----------------------
 
 
 class TestDoctestRelevance:

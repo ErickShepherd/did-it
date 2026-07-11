@@ -1,24 +1,21 @@
 # `did-it` — Design
 
-**Status:** v1.0 built to this design (branch `feat/v1-pipeline`, 2026-07-10); anchor-calibrated
-(0 false accusations / 200 real sessions). Supersedes the draft spec `did-it-spec.md`.
-**Lineage:** `internal-design-notes.md` (internal design and review).
+**Status:** v1.0 built to this design; anchor-calibrated (0 false accusations / 200 real sessions).
 **One line:** a tool that mechanically checks whether an AI coding agent's natural-language claims match what its
-Claude Code session actually did — narrow, precision-first, as a reference-grade verification tool.
+Claude Code session actually did — narrow, precision-first.
 
 ## Context / problem
 Coding agents routinely *claim* work they didn't do ("tests pass", "fixed the bug"). Verifying this today is manual —
 METR reports it as "the majority of the work" in an eval run. No adopted OSS tool reconciles an agent's **prose claims**
 against its **execution evidence** (the nearest prior art, NabaOS arXiv:2603.10060, is an unadopted single-author preprint
-scoped to generic tool-use, not coding artifacts). `did-it` fills that gap for Claude Code and doubles as a verification tool
-demonstrating agent-honesty/verification depth (the reference pattern), reusing an existing conformance spine
-(`an internal conformance checker`).
+scoped to generic tool-use, not coding artifacts). `did-it` fills that gap for Claude Code, demonstrating
+agent-honesty/verification depth.
 
 ## Goals & non-goals
 **Goals**
 - Reconcile procedural agent claims against Claude Code transcript evidence → per-claim receipts.
 - **Never falsely accuse** an honest agent (a false `CONTRADICTED` is the credibility-killing error).
-- Ship solo in weeks; demo in one screenshot/GIF; auditable, reproducible eval.
+- Ship small; demo in one screenshot/GIF; auditable, reproducible eval.
 
 **Non-goals (v1)**
 - Other agents' formats (Cursor/Aider/OpenAI) · semantic-claim adjudication ("fixed the bug", "more readable" → routed to
@@ -30,7 +27,7 @@ demonstrating agent-honesty/verification depth (the reference pattern), reusing 
 **Two separately-measured stages; the headline metric is END-TO-END (never extraction-conditional).**
 1. **Extraction (deterministic):** segment assistant prose → **procedural** capability-claims, tagged for polarity/tense/mood.
    An upstream **process-narration filter** drops meta/workflow prose ("resolved autonomously per the rubric", "SIGN-OFF",
-   "no open forks") as `NOT-A-CLAIM` *before* classification (spike: ~a third of Erick's "semantic" sentences are this).
+   "no open forks") as `NOT-A-CLAIM` *before* classification (spike: ~a third of the author's "semantic" sentences are this).
    Only assertive, past-tense, procedural statements become checkable claims.
 2. **Reconciliation:** bind each claim to transcript evidence (`tool_use`/`tool_result`), **indexed to evidence-state at
    utterance-time** (evidence must fall after the *last relevant edit* and at/before the claim).
@@ -50,11 +47,11 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
 
 ## Key decisions
 
-- **D1 — Build `did-it` (not the fused leaderboard, seatbelt, Patient Zero, or skill-lint).** `design-review` D1
-  recommendation; the leaderboard is a deferred, de-fanged v2 (no live Erick-hosted vendor ranking, ever). Rationale in the
-  lineage record.
-- **D2 — Narrow-flawless scope: Claude Code, one pinned schema, procedural claims only.** Scope-discipline *is* the design
-  signal; a reconciler that mis-reconciles self-refutes. Semantic claims → `NOT-CHECKABLE` by design.
+- **D1 — A focused reconciler, not a leaderboard or comparison service.** `did-it` verifies one agent's claims
+  against its own session; a hosted, live vendor-ranking leaderboard is explicitly out of scope (a possible
+  deferred, self-run reporting mode is v2+, never a live curated ranking).
+- **D2 — Narrow-flawless scope: Claude Code, one pinned schema, procedural claims only.** Scope-discipline *is* the
+  point; a reconciler that mis-reconciles self-refutes. Semantic claims → `NOT-CHECKABLE` by design.
 - **D3 — Two-tier BACKED (spike-driven, decisive).** The prior spec forbade transcript-BACKED and deferred `--verify`,
   making v1 vacuous (spike: ~5% informative-verdict rate). Letting an in-transcript green `tool_result` earn
   `BACKED-transcript` lifts the informative rate to a projected ~25–35% and covers the hero "tests pass" claim **with no
@@ -79,7 +76,7 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
   valid; verbatim span required). This is what makes the per-session false-accusation bar reachable: exposure ≈ the
   *number of test-pass claims* per session (~1–5, per spike), not all ~50 assertive sentences — so per-session ≤5% is
   achievable with a few-hundred-claim honest corpus rather than thousands.
-  **D4a — accusation guards (post-merge panel, 2026-07-10).** Evidence *binding* is scope-blind (the last test run
+  **D4a — accusation guards (post-merge review).** Evidence *binding* is scope-blind (the last test run
   adjudicates every pass-claim), which reopened three false-accusation classes one layer above outcome reading. Four
   abstain-only guards now sit on the red path (`evidence.accusation_guard`): (1) the red run's own summary corroborating
   the claimed count exactly = a truthful partial-pass claim; (2) a conflicting temporally-valid green run = ambiguity
@@ -90,14 +87,14 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
   (regression-pinned in `tests/test_accusation_guards.py`). Targeted-run detection covers file/`::` arguments,
   pytest `-k`/`-m` (separated or glued), and go `-run`; exclusion flags (`--deselect`/`--ignore`) are never scopes.
   *Known limitation:* bare-word cargo/go name filters (`cargo test my_test`) are not recognized as targeted.
-- **D5 — Sidechain ingestion is a v1.1 fast-follow, not a v1.0 blocker.** Spike: **0/14** of Erick's real coding sessions
+- **D5 — Sidechain ingestion is a v1.1 fast-follow, not a v1.0 blocker.** Spike: **0/14** of the author's real coding sessions
   used subagents/sidechains (his subagent-heavy sessions are planning/meta, not the target). v1.0 fails closed to
   `NOT-EVALUABLE` on sidechain-referenced evidence; README flags that heavy-delegation users should await v1.1.
 - **D6 — Deterministic, no LLM in the hot path (v1).** Resolves the no-API-billing constraint
-  ([[no-separate-api-billing-use-subscription]]) *and* the LLM-judge self-preference/circularity risk in one move, and keeps
+  (no per-token API billing) *and* the LLM-judge self-preference/circularity risk in one move, and keeps
   the tool auditable. Any future LLM stage = local open-weights, opt-in.
 - **D7 — Ground truth = synthetic-injection (reproducible, primary) + a small execution-labeled real anchor (validity
-  cross-check).** The **published synthetic corpus is the reproducible headline** for precision/FPR (a verification tool's
+  cross-check).** The **published synthetic corpus is the reproducible headline** for precision/FPR (a published tool's
   numbers must be checkable); the private real anchor reports an aggregate external-validity cross-check + an
   injected-vs-real similarity stat, with a README caveat that it's asserted, not independently reproducible. Synthetic
   recall is reported as an **upper bound** (injected lies are easier than organic — Just et al., Natella).
@@ -107,8 +104,8 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
   operator, never session content.
 
 ## Alternatives considered
-- **O2 fused leaderboard now** — rejected: cost treadmill on subscription compute + deployment blast-radius (publicly
-  ranking the labs Erick is applying to); the reframed one-shot report is a deferred v2.
+- **O2 a hosted leaderboard now** — rejected: an ongoing compute/maintenance treadmill plus the reputational
+  blast-radius of publicly ranking vendors; a deferred, self-run reporting mode is the safer v2.
 - **Hand-labeled golden corpus** — rejected as primary (`/research`): doesn't scale (FaithBench's own ceiling); NabaOS and
   the perturbation-hallucination literature use synthetic injection anchored by a small real set. Hand-labeling shrinks to a
   small validation slice, ideally execution-labeled.
@@ -147,7 +144,7 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
 ## Rollout
 - **v1.0:** deterministic extraction (+ process-narration filter) · transcript-only reconciliation · five verdicts w/
   two-tier BACKED (`BACKED-transcript`) · pinned schema + fail-closed `NOT-EVALUABLE` · synthetic corpus (dev/test split,
-  cluster-bootstrap CIs) + small real anchor · mechanical leak-gate · MIT · **local-only until Erick's explicit push notice.**
+  cluster-bootstrap CIs) + small real anchor · mechanical leak-gate · MIT.
 - **v1.1 fast-follows:** subagent-sidechain ingestion · adversarial fake-pass hardening.
   - **Shipped:** *`--verify` → `BACKED-verified`* — validated-verbatim re-execution (D3a): a green
     transcript-backed test-pass whose command is a pure test-runner invocation is re-run in `--verify <repo>`
@@ -162,4 +159,4 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
     (anchor re-checked: 0 CONTRADICTED / 400 real sessions). Flip mutants for these runners are now generated and
     measured (previously excluded), so the catch-rate can regress-fail. Genuinely-unread runners (e.g. mocha) stay
     excluded rather than mislabeled.
-- **Deferred (v2+):** the de-fanged one-shot "State of Agent Honesty" report (never a live curated leaderboard).
+- **Deferred (v2+):** an optional self-run reporting/badge mode (each user runs `did-it` on their own sessions) — never a live, centrally-curated leaderboard.

@@ -45,14 +45,14 @@ def check(path: str | Path, *, verify_repo: str | None = None) -> list[Receipt]:
     except OSError:
         # Missing/unreadable file is a usage error, not an adjudication — propagate (contract).
         raise
-    except Exception as e:  # noqa: BLE001 — top-level fail-closed backstop (audit 2026-07-10)
+    except Exception as e:  # noqa: BLE001 — top-level fail-closed backstop
         # Any other parse-stage crash (RecursionError, ValueError, MemoryError, …) must fail
         # closed to one session-level NOT-EVALUABLE receipt, never raise to library callers.
         return _not_evaluable(e)
     try:
         claims = extraction.extract_claims(session)
         return reconcile.reconcile(claims, session, verify_repo=verify_repo)
-    except Exception as e:  # noqa: BLE001 — top-level fail-closed backstop (audit 2026-07-10)
+    except Exception as e:  # noqa: BLE001 — top-level fail-closed backstop
         # Unexpected crash in extraction/reconcile becomes NOT-EVALUABLE, never a raise: the
         # documented fail-closed contract, belt-and-suspenders behind the per-boundary fixes.
         return _not_evaluable(e)
