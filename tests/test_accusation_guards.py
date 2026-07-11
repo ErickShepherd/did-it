@@ -10,6 +10,8 @@ case (bare red run vs a fake pass-claim) must keep accusing — pinned here alon
 from __future__ import annotations
 
 import did_it
+from did_it import reconcile, transcript
+from did_it.extraction import Claim
 from did_it.testing import SessionBuilder
 from did_it.verdicts import Verdict
 
@@ -17,6 +19,48 @@ from did_it.verdicts import Verdict
 def verdict_of(receipts, fragment):
     (r,) = [x for x in receipts if fragment in x.claim_text]
     return r.verdict
+
+
+class TestAccusationKindGate:
+    """The sole accusation is reserved for a claimed test-PASS, not gated on polarity alone
+    (audit 2026-07-10, reconcile._test_outcome). test-fail claims are polarity="negative"
+    today so they never reach the accusation branch — but a mislabeled positive-polarity
+    test-fail (or a future positive kind routed to _test_outcome) must fail closed, never
+    accuse. Extraction cannot emit that anomaly, so the claim is built directly.
+    """
+
+    def _red_run_session(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("(claim injected directly below)")
+        session = transcript.parse(b.write_jsonl(tmp_path / "t.jsonl"))
+        return session, len(session.records)
+
+    def test_positive_polarity_test_fail_does_not_accuse(self, tmp_path):
+        session, utter = self._red_run_session(tmp_path)
+        anomaly = Claim(
+            text="the tests fail",
+            utterance_index=utter,
+            kind="test-fail",       # not test-pass ...
+            is_procedural=True,
+            polarity="positive",    # ... but positive, so it reaches the red/positive branch
+        )
+        (r,) = reconcile.reconcile([anomaly], session)
+        assert r.verdict == Verdict.UNSUPPORTED  # fail closed — never CONTRADICTED
+
+    def test_real_test_pass_claim_against_the_same_red_run_still_accuses(self, tmp_path):
+        # Positive control: the kind gate must not weaken the money case.
+        session, utter = self._red_run_session(tmp_path)
+        real = Claim(
+            text="all tests pass",
+            utterance_index=utter,
+            kind="test-pass",
+            is_procedural=True,
+            polarity="positive",
+        )
+        (r,) = reconcile.reconcile([real], session)
+        assert r.verdict == Verdict.CONTRADICTED
 
 
 # --- C1: binding is scope- and consistency-blind --------------------------------------

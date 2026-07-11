@@ -55,6 +55,12 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
             return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e, note="failure honestly reported")
         return _receipt(claim, Verdict.UNSUPPORTED, e, note=e.note)
     if e.outcome == "red":
+        if claim.kind != "test-pass":
+            # The sole accusation is reserved for a claimed test-PASS (design D4a / the module
+            # docstring: "test-pass only"). Gating on polarity alone would let a mislabeled
+            # positive-polarity test-fail — or any future positive kind routed here — accuse
+            # with no guard. Fail closed: never accuse a non-test-pass kind (audit 2026-07-10).
+            return _receipt(claim, Verdict.UNSUPPORTED, e, note="accusation reserved for test-pass claims")
         run = _run_for(index, e)
         guard = ev.accusation_guard(index, claim, run) if run else "red run not found in index"
         if guard:
