@@ -27,6 +27,31 @@ def test_fixture_missing_marker_is_flagged(tmp_path):
     assert any("marker" in p for p in leak_gate.scan(f))
 
 
+class TestMarkerEnforcedForAllFixtureFiles:
+    """The FIXTURES_ONLY marker is required on EVERY committed file under fixtures/, not just
+    .json/.jsonl — a .log/.txt/extensionless fixture was silently exempt (audit 2026-07-10)."""
+
+    def test_non_json_fixture_without_marker_is_flagged(self, tmp_path):
+        d = tmp_path / "fixtures"
+        d.mkdir()
+        for name in ("data.log", "notes.txt", "extensionless"):
+            f = d / name
+            f.write_text("toy fixture content, no marker here")
+            assert any("marker" in p for p in leak_gate.scan(f)), name
+
+    def test_non_json_fixture_with_marker_passes(self, tmp_path):
+        d = tmp_path / "fixtures"
+        d.mkdir()
+        f = d / "data.log"
+        f.write_text("FIXTURES_ONLY toy content")
+        assert leak_gate.scan(f) == []
+
+    def test_non_fixture_file_needs_no_marker(self, tmp_path):
+        f = tmp_path / "src.log"
+        f.write_text("ordinary file, not under fixtures/")
+        assert leak_gate.scan(f) == []
+
+
 class TestKnownRepoNamesMechanism:
     """The gitignored owner-supplied 'known repo names' denylist mechanism (audit 2026-07-10,
     the DECIDE fork). The loop provides the MECHANISM; the owner supplies the NAMES. These tests
