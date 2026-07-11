@@ -1,13 +1,14 @@
 # `did-it` — Design
 
-**Status:** v1.0 built to this design; anchor-calibrated (0 false accusations / 200 real sessions).
+**Status:** built to this design; anchor-calibrated (0 false accusations / 200 real sessions, re-checked
+0 / 400 after v1.1). Package version `0.1.0`; "v1.0"/"v1.1" below name design milestones, not releases.
 **One line:** a tool that mechanically checks whether an AI coding agent's natural-language claims match what its
 Claude Code session actually did — narrow, precision-first.
 
 ## Context / problem
 Coding agents routinely *claim* work they didn't do ("tests pass", "fixed the bug"). Verifying this today is manual —
 METR reports it as "the majority of the work" in an eval run. No adopted OSS tool reconciles an agent's **prose claims**
-against its **execution evidence** (the nearest prior art, NabaOS arXiv:2603.10060, is an unadopted single-author preprint
+against its **execution evidence** (the nearest prior art, NabaOS arXiv:2603.10060, is a single-author preprint
 scoped to generic tool-use, not coding artifacts). `did-it` fills that gap for Claude Code, demonstrating
 agent-honesty/verification depth.
 
@@ -106,7 +107,7 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
 ## Alternatives considered
 - **O2 a hosted leaderboard now** — rejected: an ongoing compute/maintenance treadmill plus the reputational
   blast-radius of publicly ranking vendors; a deferred, self-run reporting mode is the safer v2.
-- **Hand-labeled golden corpus** — rejected as primary (`/research`): doesn't scale (FaithBench's own ceiling); NabaOS and
+- **Hand-labeled golden corpus** — rejected as primary: doesn't scale (FaithBench's own ceiling); NabaOS and
   the perturbation-hallucination literature use synthetic injection anchored by a small real set. Hand-labeling shrinks to a
   small validation slice, ideally execution-labeled.
 - **Single-tier BACKED requiring `--verify`** — rejected: the spike showed it zeroes out v1 (test-pass → UNSUPPORTED always).
@@ -120,11 +121,11 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
   and negation/hedge cases are the false-verdict hazard. *Mitigation:* the process-narration + polarity filters; route all
   ambiguity to `UNSUPPORTED`; measure extraction on a gold set before trusting the FPR bar; `CONTRADICTED`'s verbatim-span +
   temporal gate makes a false accusation a *conjunction* of rare events.
-- **Per-session vs per-claim false-accusation (Opus).** Mitigated by D4 (narrow CONTRADICTED trigger → small per-session
+- **Per-session vs per-claim false-accusation.** Mitigated by D4 (narrow CONTRADICTED trigger → small per-session
   exposure), but must be *measured* per-session, not just per-claim.
 - **Schema drift → mass false verdicts.** *Mitigation:* version-pin + fingerprint + multi-version CI fixtures + fail-closed
   to `NOT-EVALUABLE`. Spike: core fields stable across 10 versions (2.1.156–2.1.204), so residual risk is intra-major, manageable.
-- **Scope-erosion read ("elaborate eval harness over a log-grep", Opus).** *Mitigation:* lead the pitch with the
+- **Scope-erosion read ("elaborate eval harness over a log-grep").** *Mitigation:* lead the pitch with the
   transcript-only fake-green `CONTRADICTED` verdict (the money demo) + the eval rigor (held-out operators, cluster-bootstrap,
   utterance-time logic); be honest that v1 adjudicates procedural claims.
 - **Real anchor is one user's distribution + private/unreproducible.** *Mitigation:* D7 makes the *synthetic* corpus the

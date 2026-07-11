@@ -2,7 +2,7 @@
 """Mechanical privacy leak-gate (design doc D8).
 
 Blocks committing private content in fixtures/eval material. Run by pre-commit and CI. This is
-infrastructure, not part of the (unbuilt) did-it pipeline, so it is implemented.
+infrastructure — the privacy gate — separate from the did-it verification pipeline.
 
 Checks each given path (default: everything under fixtures/):
   * deny private path patterns, obvious secrets, and emails;

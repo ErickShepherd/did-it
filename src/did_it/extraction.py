@@ -11,7 +11,7 @@ Design: docs/design/did-it.md — "Approach" step 1. Deterministic (no LLM: D6).
      file-created, command-ran — else a procedural-verb sentence falls to `semantic`
      (-> NOT-CHECKABLE downstream); everything else is not a claim.
 
-This stage is measured separately (gold-set precision/recall) but the headline metric is
+This stage is measurable separately (gold-set precision/recall) but the headline metric is
 end-to-end. All patterns are published here, in one place, on purpose.
 """
 

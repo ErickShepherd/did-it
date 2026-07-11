@@ -1,6 +1,6 @@
 """Precision-first metrics for the eval.
 
-Design: docs/design/did-it.md — "Definition of Done" / Open questions. Provisional targets:
+Design: docs/design/did-it.md — Open questions (calibration bars). Provisional targets:
 per-session false-accusation <= 5%; BACKED-transcript coverage >= 90% of genuinely-green test-pass
 claims; fake-pass suite >= 80% caught; headline scalar F0.5 with positive class = CONTRADICTED
 detection; cluster-bootstrap CIs over sessions (effective-n, not raw claim count).
