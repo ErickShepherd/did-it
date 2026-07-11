@@ -79,8 +79,8 @@ class Session:
     def content_blocks(self, index: int) -> list[dict]:
         """The message content blocks of record `index` ([] if malformed)."""
         m = self.records[index].get("message")
-        c = m.get("content") if isinstance(m, dict) else None
-        return [b for b in c if isinstance(b, dict)] if isinstance(c, list) else []
+        # Delegate the trust-sensitive block filter to _blocks so the two can't drift (audit 2026-07-10).
+        return _blocks(m) if isinstance(m, dict) else []
 
 
 def parse(path: str | Path) -> Session:

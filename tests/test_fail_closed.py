@@ -507,3 +507,23 @@ class TestSidechainFlagIsStrictBoolean:
         session = transcript.parse(p)
         assert session.used_subagents is True
         assert session.records == []  # skipped
+
+
+class TestBlockFilterSingleSource:
+    """content_blocks delegates the block filter to _blocks so the trust-sensitive logic lives in
+    one place (audit 2026-07-10). Malformed content still yields [] (fail closed)."""
+
+    def test_content_blocks_agrees_with_blocks_and_fails_closed(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("hi")
+        b.records.append({
+            "type": "assistant", "uuid": "fx-mixed", "parentUuid": None, "version": "2.1.204",
+            "isSidechain": False,
+            "message": {"role": "assistant", "content": [{"type": "text", "text": "ok"}, "not-a-dict", 7]},
+        })
+        session = transcript.parse(b.write_jsonl(tmp_path / "t.jsonl"))
+        for i, rec in enumerate(session.records):
+            assert session.content_blocks(i) == transcript._blocks(rec["message"])
+        # the mixed record keeps only the dict block
+        mixed = next(i for i, r in enumerate(session.records) if r["uuid"] == "fx-mixed")
+        assert session.content_blocks(mixed) == [{"type": "text", "text": "ok"}]
