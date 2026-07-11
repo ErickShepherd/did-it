@@ -110,13 +110,17 @@ class TestCrossSuiteBinding:
 
 class TestCountCorroboration:
     def test_truthful_partial_pass_count_is_not_accused(self, tmp_path):
-        # Panel probe P3: the claim is CONFIRMED by the very run that would accuse it.
+        # Panel probe P3: the claim is CONFIRMED by the very run that would accuse it — never
+        # CONTRADICTED. Since audit 2026-07-10 (extraction.py:111,196) an `N/M passing` ratio
+        # with M > N is read as a partial-FAILURE admission (negative polarity), so the honest
+        # report against a matching red run is BACKED-transcript ("failure honestly reported"),
+        # not merely abstained — still, and most importantly, not accused.
         b = SessionBuilder()
         b.user_text("run the tests")
         b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
         b.assistant_text("10/12 tests passing after my change.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
-        assert verdict_of(receipts, "10/12 tests passing") == Verdict.UNSUPPORTED
+        assert verdict_of(receipts, "10/12 tests passing") == Verdict.BACKED_TRANSCRIPT
 
     def test_counted_fake_green_still_accuses_on_count_mismatch(self, tmp_path):
         # "All 12 tests pass" vs "1 failed, 11 passed" is the counted money case — the

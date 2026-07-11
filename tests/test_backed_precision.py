@@ -244,6 +244,35 @@ class TestZeroFailureIsNotAFailureClaim:
             assert c is not None and (c.kind, c.polarity) == ("test-fail", "negative"), s
 
 
+class TestPartialPassRatio:
+    """`N/M passing` with M > N is a partial-failure admission, not a clean pass. Left positive it
+    could be asserted against a partially-red run and falsely CONTRADICTED when the count guard
+    misses (audit 2026-07-10). It must be negative; a full ratio (M == N) stays positive."""
+
+    def test_partial_ratio_is_negative(self):
+        from did_it import extraction
+
+        for s in ("12/15 passing", "12/15 tests passing", "3/10 tests pass"):
+            c = extraction._classify(s)
+            assert c is not None and (c.kind, c.polarity) == ("test-fail", "negative"), s
+
+    def test_full_ratio_stays_positive_with_count(self):
+        from did_it import extraction
+
+        c = extraction._classify("15/15 tests passing")
+        assert c is not None and (c.kind, c.polarity, c.count) == ("test-pass", "positive", 15)
+
+    def test_partial_ratio_is_not_falsely_accused_on_count_mismatch(self, tmp_path):
+        # The run's own passed count (10) != the claim's (12), so the count-corroboration guard
+        # does NOT fire; before the fix the positive claim would be CONTRADICTED by the red run.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "10 passed, 5 failed in 0.30s", exit_code=1)
+        b.assistant_text("12/15 tests passing.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "12/15") != Verdict.CONTRADICTED
+
+
 class TestNarrationCoOccurrence:
     def test_checkable_claim_inside_workflow_narration_is_adjudicated(self, tmp_path):
         # seat-4: 'worktree' vocabulary silently dropped a co-occurring pass-claim.

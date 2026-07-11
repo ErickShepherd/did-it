@@ -211,6 +211,16 @@ def _classify(sentence: str) -> Claim | None:
         if m else negated
     )
     if m and not pass_negated:
+        # A "12/15 passing" ratio where the total exceeds the passed count is a PARTIAL result
+        # (3 did not pass) — a failure admission, not a clean pass. Left positive it could be
+        # asserted as a pass against a partially-red run and, when the count guard misses (the
+        # claim's count != the run's own passed count), falsely CONTRADICTED. Route it negative
+        # so it is never an accusation (audit 2026-07-10).
+        if m.group("count3") and m.group("total") and (
+            int(m.group("total").replace(",", "")) > int(m.group("count3").replace(",", ""))
+        ):
+            c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
+            return c
         c.kind, c.is_procedural = "test-pass", True
         for g in ("count1", "count2", "count3", "count4"):
             if m.group(g):
