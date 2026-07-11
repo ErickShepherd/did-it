@@ -43,6 +43,59 @@ class TestNonUtf8:
         assert hook.run_stop_hook({"transcript_path": str(self._garbage(tmp_path))}) == 0
 
 
+class TestCheckFailClosedBackstop:
+    """check() is itself the fail-closed source for direct library callers, not just the CLI/hook
+    wrappers (audit 2026-07-10, __init__.check). An unexpected crash in any pipeline stage must
+    become one session-level NOT-EVALUABLE receipt, never propagate. OSError (missing/unreadable
+    file) still propagates as a usage error, per the documented contract.
+    """
+
+    def _green_session(self, tmp_path) -> Path:
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("All 12 tests pass.")
+        return b.write_jsonl(tmp_path / "t.jsonl")
+
+    def test_unexpected_extraction_error_is_not_evaluable_not_a_raise(self, tmp_path, monkeypatch):
+        from did_it import extraction
+
+        def boom(*_a, **_k):
+            raise RuntimeError("synthetic extraction crash")
+
+        p = self._green_session(tmp_path)
+        monkeypatch.setattr(extraction, "extract_claims", boom)
+        (r,) = did_it.check(p)
+        assert r.verdict == Verdict.NOT_EVALUABLE
+        assert any("RuntimeError" in n for n in r.notes)
+
+    def test_unexpected_reconcile_error_is_not_evaluable_not_a_raise(self, tmp_path, monkeypatch):
+        from did_it import reconcile
+
+        monkeypatch.setattr(reconcile, "reconcile", lambda *_a, **_k: 1 / 0)
+        (r,) = did_it.check(self._green_session(tmp_path))
+        assert r.verdict == Verdict.NOT_EVALUABLE
+        assert any("ZeroDivisionError" in n for n in r.notes)
+
+    def test_unexpected_parse_error_is_not_evaluable_not_a_raise(self, tmp_path, monkeypatch):
+        from did_it import transcript
+
+        def boom(*_a, **_k):
+            raise RecursionError("synthetic deep-nesting crash")
+
+        p = self._green_session(tmp_path)
+        monkeypatch.setattr(transcript, "parse", boom)
+        (r,) = did_it.check(p)
+        assert r.verdict == Verdict.NOT_EVALUABLE
+        assert any("RecursionError" in n for n in r.notes)
+
+    def test_missing_file_still_propagates_oserror(self, tmp_path):
+        import pytest
+
+        with pytest.raises(OSError):
+            did_it.check(tmp_path / "does-not-exist.jsonl")
+
+
 class TestInternalErrorBackstop:
     def test_cli_unexpected_exception_is_usage_error_not_accusation(self, tmp_path, capsys, monkeypatch):
         p = tmp_path / "t.jsonl"
