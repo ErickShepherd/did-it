@@ -334,3 +334,38 @@ class TestMiscountReadsSummaryLine:
         b.assistant_text("All 13 tests pass.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+
+class TestPathBindingBoundary:
+    """A path token binds only as a whole path segment, not a substring of a longer name.
+
+    `binds_command` feeds command-ran claims (never the accusation path), so an over-bind is
+    a false BACKED endorsement, not a false accusation — but BACKED precision is a DoD bar, so
+    `app.py` must not bind a command that ran `myapp.py` or `app.pyc`.
+    """
+
+    def test_substring_of_a_longer_filename_does_not_bind(self):
+        from did_it import evidence as ev
+        assert not ev.binds_command(["app.py"], "python myapp.py")     # prefix of a longer name
+        assert not ev.binds_command(["app.py"], "rm app.pyc")          # extension continues
+        assert not ev.binds_command(["app.py"], "cat app.py.bak")      # dotted continuation
+
+    def test_whole_segment_and_paths_still_bind(self):
+        from did_it import evidence as ev
+        assert ev.binds_command(["app.py"], "python src/app.py")        # after a '/'
+        assert ev.binds_command(["app.py"], "pytest app.py::test_x")    # bounded by ':'
+        assert ev.binds_command(["requirements.txt"], "pip install -r requirements.txt")
+        assert ev.binds_command(["scripts/migrate.py"], "python scripts/migrate.py --prod")
+        assert ev.binds_command(["tests/"], "pytest tests/unit -q")     # directory prefix
+
+    def test_directory_token_does_not_bind_a_longer_dirname(self):
+        from did_it import evidence as ev
+        assert not ev.binds_command(["tests/"], "pytest mytests/unit")
+
+    def test_over_bound_command_ran_claim_is_unsupported(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("migrate")
+        b.bash("python myapp.py --prod", "done", exit_code=0)
+        b.assistant_text("Ran app.py against prod.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "app.py") == Verdict.UNSUPPORTED
