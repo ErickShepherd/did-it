@@ -34,24 +34,32 @@ _UNSAFE = re.compile(r"[;|&<>$`(){}\n\r\\]")
 _ENV_PREFIX = re.compile(r"^\s*\w+=")
 _MAX_LEN = 4096
 
-#: Runner options that load code / config / plugins by name or path — the vector past a
-#: confined argv[0] (e.g. `pytest --pyargs evilpkg`, `pytest -p evilplugin`, `go test -exec`).
-#: Refused regardless of value; honest "run the tests" commands don't use them.
-_CODE_LOADER_OPTS = frozenset({
-    "-p", "--plugin", "--pyargs", "-c", "--config", "--rootdir", "--confcutdir",
-    "-o", "--override-ini", "--import-mode", "--manifest-path", "-exec", "-toolexec",
-    "-r", "--require",
+#: Argument gate is a POSITIVE allow-list, not a denylist. A denylist of code-loading options
+#: proved bypassable by glued short options (`-r/tmp/evil.rb`, `-pevilplugin`) and by any option
+#: not enumerated (review round 3), because `-p<name>` is indistinguishable from a benign `-x`
+#: without per-runner knowledge. So only these known-benign flags — plus in-repo relative path
+#: arguments — are admitted; everything else fails closed (the claim stays BACKED-transcript).
+_FLAGS_NO_VALUE = frozenset({
+    "-q", "--quiet", "-x", "--exitfirst", "-v", "-vv", "-vvv", "--verbose", "-s", "-l",
+    "--showlocals", "--no-header", "--no-summary", "-ra", "-rA", "--lf", "--last-failed",
+    "--ff", "--failed-first", "-race", "-cover", "-short", "--release", "--all", "--workspace",
+    "--lib", "--bins", "--locked", "--all-features", "--no-default-features", "--ci", "--silent",
+})
+#: Flags that take a benign SCALAR value (a filter expression, marker, number, or style) — never
+#: a path or module to load. The value may be glued (`--maxfail=1`) or the next token (`-k expr`).
+_FLAGS_WITH_VALUE = frozenset({
+    "-k", "-m", "-run", "--tb", "--maxfail", "--durations", "--color", "-count",
+    "--timeout", "-n", "--numprocesses",
 })
 
 
-def _escapes_repo(token: str) -> bool:
-    """True if a token (or its `=value`) points OUTSIDE the repo: absolute, `..`, or `~`.
+def _escapes_repo(value: str) -> bool:
+    """True if `value` points OUTSIDE the repo tree: absolute, `~`-anchored, or with a `..` segment.
 
     A test runner treats a path argument as code to import (pytest loads `conftest.py` from a
-    path/rootdir at collection time), so an out-of-repo path arg executes out-of-repo code even
-    behind a confined argv[0]. In-repo relative paths are the repo's own code — already trusted.
+    path/rootdir at collection time), so an out-of-repo path executes out-of-repo code even behind
+    a confined argv[0]. In-repo relative paths are the repo's own code — already trusted.
     """
-    value = token.split("=", 1)[1] if token.startswith("-") and "=" in token else token
     return os.path.isabs(value) or value.startswith("~") or ".." in value.split("/")
 
 _DEFAULT_RUNS = 2          # >1 so a flaky pass is caught rather than upgraded
@@ -83,15 +91,34 @@ def is_verifiable_command(command: str) -> bool:
         return False
     if not argv:
         return False
-    # Confine EVERY token to the repo tree (or a PATH-resolved bare name), not just argv[0]:
-    # the reader's runner pattern allows a path prefix (`(?:\S*/)?pytest`) AND a runner
-    # argument can point collection/config at out-of-repo code (review rounds 1–2). A bare
-    # name resolves via the user's PATH; an in-repo relative path (`.venv/bin/python`,
-    # `tests/foo.py`) is the repo's own code, which any test run executes anyway. Also refuse
-    # options that load code/config/plugins by name (`--pyargs`, `-p`, `-exec`, …).
-    for token in argv:
-        if _escapes_repo(token) or token.split("=", 1)[0] in _CODE_LOADER_OPTS:
-            return False
+    # Every token must be provably safe (allow-list). argv[0] and positional args are in-repo
+    # relative paths/selectors (a bare name resolves via the user's PATH; an in-repo path
+    # — `.venv/bin/python`, `tests/foo.py` — is the repo's own code, which any test run executes
+    # anyway); flags must be enumerated benign ones; a value flag's value is a benign scalar.
+    # Anything else — an unknown/glued flag, an out-of-repo path — fails closed.
+    # Residual (documented, review round 3 non-blocking): a bare go/unittest import-path
+    # positional (`go test host.tld/pkg`) is admitted; go's read-only mode keeps it inside the
+    # declared dependency tree rather than fetching, so it stays within --verify's repo consent.
+    expect_value = False
+    for i, token in enumerate(argv):
+        if expect_value:
+            if _escapes_repo(token):   # a scalar value, but never let a path escape via it
+                return False
+            expect_value = False
+            continue
+        if i == 0 or not token.startswith("-"):
+            if _escapes_repo(token):
+                return False
+            continue
+        name, sep, value = token.partition("=")
+        if name in _FLAGS_WITH_VALUE:
+            if sep and _escapes_repo(value):
+                return False
+            expect_value = not sep
+            continue
+        if name in _FLAGS_NO_VALUE and not sep:
+            continue
+        return False   # unknown, glued, or code-loading flag → fail closed
     # Same recognizer the outcome-reader uses: a runner at a command position, actually
     # executing tests. With no shell metacharacters present, that runner is the whole command.
     return ev.is_test_command(command)

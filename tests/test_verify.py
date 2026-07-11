@@ -83,6 +83,10 @@ class TestValidatorRejects:
             "pytest -c /tmp/evil.ini",
             "cargo test --manifest-path=/tmp/evil/Cargo.toml",
             "go test -exec /tmp/evil ./...",
+            "rspec -r/tmp/evil.rb",                  # glued short option -> loads out-of-repo ruby
+            "pytest -c/tmp/evil.ini",                # glued -c bypasses =-split and denylist
+            "pytest -pevilplugin",                   # glued -p plugin load
+            "pytest --unknown-flag",                 # unknown flag -> fail closed (allow-list)
         ):
             assert not verify.is_verifiable_command(cmd), cmd
 
