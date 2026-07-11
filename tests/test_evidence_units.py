@@ -36,6 +36,16 @@ class TestIsTestCommand:
     def test_grep_for_pytest_is_not_a_test_run(self):
         assert not is_test_command("grep -r pytest docs/")
 
+    def test_version_on_a_different_clause_does_not_drop_the_test_run(self):
+        # _NON_EXECUTING is checked per-clause: an unrelated `--version` elsewhere must not
+        # drop a real test run (audit 2026-07-10). Both operand orderings.
+        assert is_test_command("pytest tests/ && node build.js --version")
+        assert is_test_command("node build.js --version && pytest tests/")
+
+    def test_version_on_the_runner_clause_still_excludes_it(self):
+        assert not is_test_command("pytest --version")
+        assert not is_test_command("pytest --version && echo done")
+
 
 class TestTemporalGuardRelevance:
     def test_doc_only_edit_does_not_void_a_green_run(self, tmp_path):

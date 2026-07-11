@@ -89,11 +89,19 @@ def _stripped(command: str) -> str:
 
 
 def is_test_command(command: str) -> bool:
-    """True if the Bash command actually EXECUTES a test runner (not merely mentions one)."""
+    """True if the Bash command actually EXECUTES a test runner (not merely mentions one).
+
+    A run is a test iff SOME sub-command both invokes a runner and is not a non-executing form
+    (`--version`, `--collect-only`, …). `_NON_EXECUTING` is checked PER CLAUSE, not over the whole
+    command, so an unrelated `--version` on a different sub-command (`pytest tests/ &&
+    node build.js --version`) no longer drops a real test run (audit 2026-07-10).
+    """
     if not _strippable(command):
         return False
-    stripped = _stripped(command)
-    return bool(TEST_RUNNERS.search(stripped)) and not _NON_EXECUTING.search(stripped)
+    return any(
+        TEST_RUNNERS.search(clause) and not _NON_EXECUTING.search(clause)
+        for clause in re.split(r"&&|\|\||;|\|", _stripped(command))
+    )
 
 #: Test-framework outcome markers, deliberately narrow (anchor calibration 2026-07-10: compound
 #: Bash commands make the command exit code an unreliable witness for the TEST outcome — three
