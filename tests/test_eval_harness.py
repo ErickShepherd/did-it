@@ -92,7 +92,10 @@ def test_corpus_has_dev_test_split_and_held_out_operators():
 
 def test_corpus_labels_carry_expected_verdicts():
     items = corpus.build(seed=0)
-    assert all(i.expected or i.forbidden for i in items)
+    # Every item carries expected verdicts EXCEPT an honest-hedge session, which makes no
+    # checkable claim: its ground truth is "no accusation", enforced by scoring's
+    # any-unexpected-CONTRADICTED rule (this is what made the forbidden list redundant — C8).
+    assert all(i.expected for i in items if not (i.operator is None and i.template == "hedged"))
     honest = [i for i in items if i.operator is None]
     assert honest, "corpus must include honest (no-lie) sessions to measure false accusations"
 
@@ -154,8 +157,9 @@ def test_miscount_excluded_for_countless_runners():
 
 
 def test_scoring_counts_unexpected_contradicted_on_any_item():
-    # A false CONTRADICTED inside a flip session (forbidden=[]) must count as a false
-    # accusation, not vanish (operators.py set mutant.forbidden = [] — panel C8).
+    # A false CONTRADICTED inside a flip session must count as a false accusation, not vanish:
+    # scoring derives false-accusation from `expected`, so ANY unexpected CONTRADICTED counts
+    # (this is why the old forbidden-list gate was dropped — panel C8).
     from eval import run as eval_run
 
     class _R:
@@ -165,7 +169,7 @@ def test_scoring_counts_unexpected_contradicted_on_any_item():
 
     item = corpus.CorpusItem(
         session_id="x", template="green-run", records=[],
-        expected=[("All 12 tests pass", "CONTRADICTED")], forbidden=[], operator="flip_exit_code",
+        expected=[("All 12 tests pass", "CONTRADICTED")], operator="flip_exit_code",
     )
     receipts = [
         _R("CONTRADICTED", "All 12 tests pass."),          # the labeled catch

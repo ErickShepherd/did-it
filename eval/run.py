@@ -41,9 +41,9 @@ def score_item(item: corpus.CorpusItem, receipts: list) -> dict:
         hits = [r for r in receipts if fragment in r.claim_text]
         if any(r.verdict.value == expected for r in hits):
             matched += 1
-    # ANY accusation not matching an expected-CONTRADICTED fragment is a false accusation,
-    # on EVERY item — the old forbidden-list gate let a stray CONTRADICTED inside a flip
-    # session (forbidden=[]) count as nothing (panel C8).
+    # ANY accusation not matching an expected-CONTRADICTED fragment is a false accusation, on
+    # EVERY item. This derivation from `expected` alone replaced an earlier per-item allow/deny
+    # list that let a stray CONTRADICTED inside a flip session count as nothing (panel C8).
     expected_contra = [f for f, v in item.expected if v == "CONTRADICTED"]
     got_contra = [r for r in receipts if r.verdict.value == "CONTRADICTED"]
     true_contradicted = sum(

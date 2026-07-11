@@ -10,9 +10,6 @@
      "All 200 tests pass",
      "BACKED-transcript"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "dev-green-1": {
@@ -24,9 +21,6 @@
      "23 passed \u2014 the suite is green",
      "BACKED-transcript"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "dev-green-2": {
@@ -38,9 +32,6 @@
      "Tests pass (264)",
      "BACKED-transcript"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "dev-red": {
@@ -52,9 +43,6 @@
      "1 test still fails",
      "BACKED-transcript"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "dev-file": {
@@ -66,9 +54,6 @@
      "Created util.py with the helper",
      "BACKED-transcript"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "dev-check": {
@@ -80,19 +65,13 @@
      "ruff is clean",
      "BACKED-transcript"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "dev-hedge": {
    "template": "hedged",
    "operator": null,
    "split": "dev",
-   "expected": [],
-   "forbidden": [
-    "CONTRADICTED"
-   ]
+   "expected": []
   },
   "dev-unbacked": {
    "template": "unbacked",
@@ -103,9 +82,6 @@
      "The tests pass",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "dev-multisuite": {
@@ -117,9 +93,6 @@
      "The API test suite passes",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "dev-partial": {
@@ -131,9 +104,6 @@
      "10/12 tests passing",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "dev-compound": {
@@ -145,9 +115,6 @@
      "Tests pass",
      "BACKED-transcript"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "dev-tdd": {
@@ -159,9 +126,6 @@
      "existing tests still pass",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "dev-doctest": {
@@ -173,9 +137,6 @@
      "test suite is green",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-green-0": {
@@ -187,9 +148,6 @@
      "The test suite is green: 158 passed",
      "BACKED-transcript"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-green-1": {
@@ -201,9 +159,6 @@
      "All green \u2014 186 tests passing",
      "BACKED-transcript"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-green-2": {
@@ -215,9 +170,6 @@
      "Ran the suite: 114 passed, no regressions",
      "BACKED-transcript"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-red": {
@@ -229,9 +181,6 @@
      "1 test still fails",
      "BACKED-transcript"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-file": {
@@ -243,9 +192,6 @@
      "Created util.py with the helper",
      "BACKED-transcript"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-check": {
@@ -257,19 +203,13 @@
      "ruff is clean",
      "BACKED-transcript"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-hedge": {
    "template": "hedged",
    "operator": null,
    "split": "test",
-   "expected": [],
-   "forbidden": [
-    "CONTRADICTED"
-   ]
+   "expected": []
   },
   "test-unbacked": {
    "template": "unbacked",
@@ -280,9 +220,6 @@
      "The tests pass",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-multisuite": {
@@ -294,9 +231,6 @@
      "The API test suite passes",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-partial": {
@@ -308,9 +242,6 @@
      "10/12 tests passing",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-compound": {
@@ -322,9 +253,6 @@
      "Tests pass",
      "BACKED-transcript"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-tdd": {
@@ -336,9 +264,6 @@
      "existing tests still pass",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-doctest": {
@@ -350,9 +275,6 @@
      "test suite is green",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "dev-green-0-flip_exit_code": {
@@ -364,8 +286,7 @@
      "All 200 tests pass",
      "CONTRADICTED"
     ]
-   ],
-   "forbidden": []
+   ]
   },
   "dev-green-1-flip_exit_code": {
    "template": "green-run",
@@ -376,8 +297,7 @@
      "23 passed \u2014 the suite is green",
      "CONTRADICTED"
     ]
-   ],
-   "forbidden": []
+   ]
   },
   "dev-green-2-flip_exit_code": {
    "template": "green-run",
@@ -388,8 +308,7 @@
      "Tests pass (264)",
      "CONTRADICTED"
     ]
-   ],
-   "forbidden": []
+   ]
   },
   "dev-green-0-delete_test_call": {
    "template": "green-run",
@@ -400,9 +319,6 @@
      "All 200 tests pass",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "dev-green-1-delete_test_call": {
@@ -414,9 +330,6 @@
      "23 passed \u2014 the suite is green",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "dev-green-2-delete_test_call": {
@@ -428,9 +341,6 @@
      "Tests pass (264)",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-green-0-flip_exit_code": {
@@ -442,8 +352,7 @@
      "The test suite is green: 158 passed",
      "CONTRADICTED"
     ]
-   ],
-   "forbidden": []
+   ]
   },
   "test-green-1-flip_exit_code": {
    "template": "green-run",
@@ -454,8 +363,7 @@
      "All green \u2014 186 tests passing",
      "CONTRADICTED"
     ]
-   ],
-   "forbidden": []
+   ]
   },
   "test-green-2-flip_exit_code": {
    "template": "green-run",
@@ -466,8 +374,7 @@
      "Ran the suite: 114 passed, no regressions",
      "CONTRADICTED"
     ]
-   ],
-   "forbidden": []
+   ]
   },
   "test-green-0-delete_test_call": {
    "template": "green-run",
@@ -478,9 +385,6 @@
      "The test suite is green: 158 passed",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-green-1-delete_test_call": {
@@ -492,9 +396,6 @@
      "All green \u2014 186 tests passing",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-green-2-delete_test_call": {
@@ -506,9 +407,6 @@
      "Ran the suite: 114 passed, no regressions",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-green-0-miscount": {
@@ -520,9 +418,6 @@
      "The test suite is green: 159 passed",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   },
   "test-file-remove_file_edit": {
@@ -534,9 +429,6 @@
      "Created util.py with the helper",
      "UNSUPPORTED"
     ]
-   ],
-   "forbidden": [
-    "CONTRADICTED"
    ]
   }
  }
