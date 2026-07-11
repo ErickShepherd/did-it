@@ -30,6 +30,12 @@ SUPPORTED_SCHEMA_VERSIONS: tuple[str, ...] = ("2.1.156", "2.1.205")
 
 MESSAGE_TYPES = frozenset({"assistant", "user"})
 
+#: Byte cap on a transcript file, checked (via stat) BEFORE the whole-file read. `read_text`
+#: + `.split("\n")` holds ~2x the file in memory, so an uncapped GB-scale `.jsonl` raised an
+#: uncaught MemoryError — the huge-file DoS the threat model names (audit 2026-07-10). 256 MiB
+#: is ~2.5x the largest real transcripts observed while still bounding peak memory.
+_MAX_TRANSCRIPT_BYTES = 256 * 1024 * 1024
+
 
 class UnknownSchema(Exception):
     """Raised when a transcript's schema is outside the validated range (-> NOT-EVALUABLE)."""
@@ -41,9 +47,16 @@ class ParseFailure(Exception):
 
 def _version_tuple(v: str) -> tuple[int, int, int] | None:
     parts = v.split(".")
-    if len(parts) != 3 or not all(p.isdigit() for p in parts):
+    if len(parts) != 3:
         return None
-    return (int(parts[0]), int(parts[1]), int(parts[2]))
+    try:
+        return (int(parts[0]), int(parts[1]), int(parts[2]))
+    except ValueError:
+        # Fail closed to "unsupported", never crash. The old `str.isdigit()` gate accepted
+        # Unicode digits (`'²'.isdigit()` is True) that int() rejects, and even `.isdecimal()`
+        # would not stop a huge all-decimal part from tripping int()'s int_max_str_digits
+        # limit — both raised an uncaught ValueError on a crafted version (audit 2026-07-10).
+        return None
 
 
 def is_supported_version(v: str) -> bool:
@@ -66,8 +79,8 @@ class Session:
     def content_blocks(self, index: int) -> list[dict]:
         """The message content blocks of record `index` ([] if malformed)."""
         m = self.records[index].get("message")
-        c = m.get("content") if isinstance(m, dict) else None
-        return [b for b in c if isinstance(b, dict)] if isinstance(c, list) else []
+        # Delegate the trust-sensitive block filter to _blocks so the two can't drift (audit 2026-07-10).
+        return _blocks(m) if isinstance(m, dict) else []
 
 
 def parse(path: str | Path) -> Session:
@@ -77,6 +90,10 @@ def parse(path: str | Path) -> Session:
     to the CLI as a usage error. Never silently drops an unreadable message line.
     """
     path = Path(path)
+    size = path.stat().st_size  # OSError (missing/unreadable) propagates as a usage error
+    if size > _MAX_TRANSCRIPT_BYTES:
+        # Fail closed BEFORE the whole-file read, so a huge file is NOT-EVALUABLE, not a crash.
+        raise ParseFailure(f"{path.name}: {size} bytes exceeds the {_MAX_TRANSCRIPT_BYTES}-byte cap")
     session = Session(path=path)
     try:
         # split("\n"), NOT splitlines(): U+2028/U+2029/NEL are legal UNESCAPED inside JSON
@@ -93,7 +110,12 @@ def parse(path: str | Path) -> Session:
             continue
         try:
             rec = json.loads(line)
-        except json.JSONDecodeError as e:
+        except (ValueError, RecursionError) as e:
+            # JSONDecodeError (a ValueError subclass) is the common case; two adversarial-but-
+            # tiny inputs raise siblings that escaped the old narrow catch and violated
+            # fail-closed (audit 2026-07-10): a huge integer literal hits int()'s
+            # int_max_str_digits limit (ValueError), and ~200KB of nested brackets overflows
+            # the JSON C decoder (RecursionError). Both must be NOT-EVALUABLE, never a crash.
             raise ParseFailure(f"{path.name}:{lineno}: unparseable line") from e
         if not isinstance(rec, dict):
             raise ParseFailure(f"{path.name}:{lineno}: non-object record")
@@ -109,7 +131,9 @@ def parse(path: str | Path) -> Session:
         if not isinstance(message, dict) or not isinstance(message.get("content"), (list, str)):
             raise ParseFailure(f"{path.name}:{lineno}: message without content")
 
-        if rec.get("isSidechain"):
+        if rec.get("isSidechain") is True:
+            # `is True`, not truthy: the JSON string "false" is truthy and would be mis-read as a
+            # sidechain (audit 2026-07-10). Real records carry a JSON boolean.
             session.used_subagents = True
             continue  # sidechain records are not ingested in v1 (D5)
 

@@ -14,7 +14,10 @@ from .verdicts import FAILING_VERDICTS, Receipt
 #: Claim text and notes are untrusted transcript content rendered to a terminal: C0/C1
 #: controls (ANSI cursor-up/erase can visually rewrite a CONTRADICTED row) and Unicode
 #: bidi overrides are neutralized; a newline would forge a whole receipt row (panel C6).
-_UNSAFE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]")
+#: The range spans U+2028 (LINE SEP) and U+2029 (PARAGRAPH SEP) \u2014 many terminals treat both
+#: as hard breaks, so like `\n` they could forge a row; the real writer (Node JSON.stringify)
+#: emits them raw (testing.py) so they reach here unescaped (audit 2026-07-10).
+_UNSAFE = re.compile(r"[\x00-\x08\x0a-\x1f\x7f-\x9f\u2028-\u202e\u2066-\u2069]")
 
 
 def _sanitize(text: str) -> str:

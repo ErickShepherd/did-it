@@ -50,6 +50,12 @@ class TestValidatorRejects:
         ):
             assert not verify.is_verifiable_command(cmd), cmd
 
+    def test_rejects_embedded_nul(self):
+        # A NUL byte was absent from _UNSAFE, so it passed the gate then crashed subprocess
+        # with an uncaught ValueError (audit 2026-07-10). It must fail the gate outright.
+        for cmd in ("pytest\x00 -q", "pytest\x00-q", "\x00pytest", "pytest -q\x00"):
+            assert not verify.is_verifiable_command(cmd), repr(cmd)
+
     def test_rejects_non_runner_and_non_executing(self):
         for cmd in ("echo pytest passed", "pip install pytest", "cat results.txt",
                     "pytest --version", "ls -la"):
@@ -91,6 +97,12 @@ class TestValidatorRejects:
         ):
             assert not verify.is_verifiable_command(cmd), cmd
 
+    def test_trailing_value_flag_with_no_value_is_rejected(self):
+        # A value-flag left dangling (`pytest -k` with nothing after) must fail closed, not be
+        # admitted with expect_value still True (audit 2026-07-10).
+        for cmd in ("pytest -k", "pytest -m", "pytest --maxfail", "pytest -k -q"):
+            assert not verify.is_verifiable_command(cmd), cmd
+
     def test_still_accepts_ordinary_test_arguments(self):
         for cmd in ("pytest -q tests/test_foo.py", "pytest -k expr", "pytest tests/",
                     "pytest --maxfail=1 -q", "pytest tests/test_a.py::test_b",
@@ -126,11 +138,37 @@ class TestExecutorAggregation:
         self._fake(monkeypatch, [(0, "3 passed in 0.01s"), (1, "1 failed, 2 passed in 0.01s")])
         assert verify.run_command("pytest -q", "/repo", runs=2).status == "flaky"
 
+    def test_flaky_detail_accounts_for_inconclusive_runs(self, monkeypatch):
+        # 1 green + 1 inconclusive (exit 0, no summary) is flaky; the detail must not read
+        # "1 green / 0 red of 2" and drop the inconclusive run (audit 2026-07-10).
+        self._fake(monkeypatch, [(0, "3 passed in 0.01s"), (0, "ok\n")])
+        result = verify.run_command("pytest -q", "/repo", runs=2)
+        assert result.status == "flaky"
+        assert "1 inconclusive" in result.detail and "of 2" in result.detail
+
     def test_timeout_is_errored(self, monkeypatch):
         def boom(argv, **kw):
             raise verify.subprocess.TimeoutExpired(argv, kw.get("timeout"))
         monkeypatch.setattr(verify.subprocess, "run", boom)
         assert verify.run_command("pytest -q", "/repo", runs=2).status == "errored"
+
+    def test_subprocess_valueerror_is_errored_not_raised(self, monkeypatch):
+        # Belt-and-suspenders for the "Never raises" contract: even if some argv reaches
+        # subprocess and it raises ValueError (e.g. "embedded null byte"), run_command must
+        # return errored, never propagate (audit 2026-07-10).
+        def boom(argv, **kw):
+            raise ValueError("embedded null byte")
+        monkeypatch.setattr(verify.subprocess, "run", boom)
+        assert verify.run_command("pytest -q", "/repo", runs=2).status == "errored"
+
+    def test_bare_exit_zero_without_summary_is_not_green(self, monkeypatch):
+        # A no-op `test` script (`npm test` -> `echo ok`) exits 0 with NO framework summary.
+        # Re-execution must not endorse it as green — nothing actually ran, so no BACKED-verified
+        # upgrade (audit 2026-07-10). It counts as neither green nor red -> errored.
+        self._fake(monkeypatch, [(0, "ok\n"), (0, "ok\n")])
+        result = verify.run_command("npm test", "/repo", runs=2)
+        assert result.status != "green"
+        assert result.status == "errored"
 
     def test_runs_with_shell_false_and_argv(self, monkeypatch):
         seen = {}
@@ -161,6 +199,25 @@ class TestReconcileUpgradeWiring:
                             lambda *a, **k: verify.VerifyResult("green", "2/2 green"))
         r = verdict_of(did_it.check(self._session(tmp_path), verify_repo="/repo"), "12 tests pass")
         assert r.verdict == Verdict.BACKED_VERIFIED
+
+    def test_reexecution_memoized_once_per_ref_even_if_result_is_falsy(self, tmp_path, monkeypatch):
+        # Two test-pass claims about the SAME green run must trigger ONE re-run — the memo keys
+        # on ref, not VerifyResult truthiness, and must not eagerly re-run inside setdefault
+        # (audit 2026-07-10). Force a falsy VerifyResult to expose the old `get() or setdefault`.
+        calls = {"n": 0}
+
+        def fake_run(*_a, **_k):
+            calls["n"] += 1
+            return verify.VerifyResult("green", "1/1 green")
+
+        monkeypatch.setattr(verify, "run_command", fake_run)
+        monkeypatch.setattr(verify.VerifyResult, "__bool__", lambda self: False, raising=False)
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("All 12 tests pass. The suite is green.")  # two claims, one run
+        did_it.check(b.write_jsonl(tmp_path / "t.jsonl"), verify_repo="/repo")
+        assert calls["n"] == 1
 
     def test_red_reverify_never_downgrades_to_contradicted(self, tmp_path, monkeypatch):
         monkeypatch.setattr(verify, "run_command",

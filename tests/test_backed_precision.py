@@ -194,6 +194,104 @@ class TestNegationExemption:
         assert verdict_of(receipts, "still fail") == Verdict.BACKED_TRANSCRIPT
 
 
+class TestPassClauseNegationScoping:
+    """A pass-claim's negation is scoped to its own clause-through-end, so a failure word in an
+    unrelated EARLIER `;`-clause does not invert a genuine pass (audit 2026-07-10) — while a LIVE
+    failure alongside/after the pass stays negative (never a false accusation)."""
+
+    def test_earlier_broken_clause_does_not_invert_the_pass(self):
+        from did_it import extraction
+
+        c = extraction._classify("Fixed the broken import; all tests pass.")
+        assert c is not None
+        assert (c.kind, c.polarity) == ("test-pass", "positive")
+
+    def test_trailing_live_failure_keeps_the_pass_negative(self):
+        # Safety pin for the asymmetry: a failure reported AFTER the pass is a live caveat.
+        from did_it import extraction
+
+        c = extraction._classify("All tests pass; the suite still fails.")
+        assert c is not None
+        assert (c.kind, c.polarity) == ("test-fail", "negative")
+
+    def test_earlier_broken_clause_backs_a_green_run(self, tmp_path):
+        # end-to-end: the pass claim is now positive and, on a green run, BACKED — not lost.
+        b = SessionBuilder()
+        b.user_text("fix the import and run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("Fixed the broken import; all tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "all tests pass") == Verdict.BACKED_TRANSCRIPT
+
+
+class TestZeroFailureIsNotAFailureClaim:
+    """`TEST_FAIL` now runs on the exemption-stripped residual, and the exemption covers the
+    `0 tests failed` form, so a zero-failure statement is not mislabeled test-fail/negative
+    (audit 2026-07-10). Genuine non-zero failures are untouched."""
+
+    def test_zero_failure_statements_are_not_test_fail(self):
+        from did_it import extraction
+
+        for s in ("0 failed.", "0 tests failed.", "0 failing."):
+            c = extraction._classify(s)
+            assert c is None or c.polarity != "negative", s
+
+    def test_nonzero_failures_are_still_test_fail(self):
+        from did_it import extraction
+
+        for s in ("2 failed.", "2 tests failed.", "10 failed."):
+            c = extraction._classify(s)
+            assert c is not None and (c.kind, c.polarity) == ("test-fail", "negative"), s
+
+
+class TestExitCodeRunContextOnly:
+    """EXIT_CODE must match run-context forms, not behavioral prose (audit 2026-07-10). A bare
+    `returns N` ("returns 0 when empty", "returned 3 results") is not an exit-code claim."""
+
+    def test_bare_returns_is_not_an_exit_code_claim(self):
+        from did_it import extraction
+
+        for s in ("returns 0 when empty", "returned 3 results", "the helper returns 0"):
+            c = extraction._classify(s)
+            assert c is None or c.kind != "exit-code", s
+
+    def test_run_context_exit_codes_still_classify(self):
+        from did_it import extraction
+
+        for s in ("exit code 1", "exited with 2", "rc=3", "returned code 5"):
+            c = extraction._classify(s)
+            assert c is not None and c.kind == "exit-code", s
+
+
+class TestPartialPassRatio:
+    """`N/M passing` with M > N is a partial-failure admission, not a clean pass. Left positive it
+    could be asserted against a partially-red run and falsely CONTRADICTED when the count guard
+    misses (audit 2026-07-10). It must be negative; a full ratio (M == N) stays positive."""
+
+    def test_partial_ratio_is_negative(self):
+        from did_it import extraction
+
+        for s in ("12/15 passing", "12/15 tests passing", "3/10 tests pass"):
+            c = extraction._classify(s)
+            assert c is not None and (c.kind, c.polarity) == ("test-fail", "negative"), s
+
+    def test_full_ratio_stays_positive_with_count(self):
+        from did_it import extraction
+
+        c = extraction._classify("15/15 tests passing")
+        assert c is not None and (c.kind, c.polarity, c.count) == ("test-pass", "positive", 15)
+
+    def test_partial_ratio_is_not_falsely_accused_on_count_mismatch(self, tmp_path):
+        # The run's own passed count (10) != the claim's (12), so the count-corroboration guard
+        # does NOT fire; before the fix the positive claim would be CONTRADICTED by the red run.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "10 passed, 5 failed in 0.30s", exit_code=1)
+        b.assistant_text("12/15 tests passing.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "12/15") != Verdict.CONTRADICTED
+
+
 class TestNarrationCoOccurrence:
     def test_checkable_claim_inside_workflow_narration_is_adjudicated(self, tmp_path):
         # seat-4: 'worktree' vocabulary silently dropped a co-occurring pass-claim.

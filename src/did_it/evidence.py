@@ -40,7 +40,12 @@ EXIT_CODE_SPAN = re.compile(r"^Exit code (\d+)", re.M)
 #: (`echo "pytest passed"`) is not a test run. Heredoc bodies likewise (LOOP_LEARNINGS-style
 #: notes quoting a pytest invocation were the top phantom-run source in the real anchor).
 QUOTED = re.compile(r"'[^']*'|\"[^\"]*\"")
-HEREDOC = re.compile(r"<<-?\s*(['\"]?)(\w+)\1.*?^\2$", re.S | re.M)
+#: Heredoc delimiter length gate. `(\w+)` (unbounded) backtracks quadratically on a SINGLE `<<`
+#: followed by a long unbroken word with no terminator (3.6s at 40KB → hours at 1MB); the
+#: opener-COUNT cap below does not catch a one-opener payload (audit 2026-07-10). Real delimiters
+#: are short identifiers (EOF, PYEOF, …), so `{1,64}` bounds the backreference and the backtrack.
+_HEREDOC_DELIM_CAP = 64
+HEREDOC = re.compile(rf"<<-?\s*(['\"]?)(\w{{1,{_HEREDOC_DELIM_CAP}}})\1.*?^\2$", re.S | re.M)
 
 
 #: HEREDOC's lazy body scan is quadratic on unterminated `<<X` floods (review round 3 of
@@ -84,11 +89,19 @@ def _stripped(command: str) -> str:
 
 
 def is_test_command(command: str) -> bool:
-    """True if the Bash command actually EXECUTES a test runner (not merely mentions one)."""
+    """True if the Bash command actually EXECUTES a test runner (not merely mentions one).
+
+    A run is a test iff SOME sub-command both invokes a runner and is not a non-executing form
+    (`--version`, `--collect-only`, …). `_NON_EXECUTING` is checked PER CLAUSE, not over the whole
+    command, so an unrelated `--version` on a different sub-command (`pytest tests/ &&
+    node build.js --version`) no longer drops a real test run (audit 2026-07-10).
+    """
     if not _strippable(command):
         return False
-    stripped = _stripped(command)
-    return bool(TEST_RUNNERS.search(stripped)) and not _NON_EXECUTING.search(stripped)
+    return any(
+        TEST_RUNNERS.search(clause) and not _NON_EXECUTING.search(clause)
+        for clause in re.split(r"&&|\|\||;|\|", _stripped(command))
+    )
 
 #: Test-framework outcome markers, deliberately narrow (anchor calibration 2026-07-10: compound
 #: Bash commands make the command exit code an unreliable witness for the TEST outcome — three
@@ -151,6 +164,20 @@ class Run:
     def _summary_lines(self) -> list[str]:
         return [line for line in self.output.splitlines() if _is_summary_line(line)]
 
+    @staticmethod
+    def _summaries_conflict(lines: list[str]) -> bool:
+        """A genuinely-green summary line AND a SEPARATE failure-summary line coexist.
+
+        The two framework summaries disagree, so neither can be trusted as THE outcome of
+        this run — the canonical case is an echoed/cat'd stale CI log's `N failed … in Ns`
+        summary sitting beside a real green summary. Abstain: never accuse, never assert
+        backed (audit 2026-07-10 — the #1 false-CONTRADICTED path). A single mixed line
+        (`5 failed, 3 passed in 12.01s`) is a genuine partial failure, not a conflict: it
+        carries no green-*only* summary line, so it still reads as framework_failed."""
+        green = any(_PASSED_COUNT.search(ln) and not _FAILED_COUNT.search(ln) for ln in lines)
+        failed = any(_FAILED_COUNT.search(ln) for ln in lines)
+        return green and failed
+
     @property
     def framework_failed(self) -> bool:
         """The test framework's own summary reported failures/errors.
@@ -158,19 +185,22 @@ class Run:
         Per-test FAILED/ERROR lines count only when the output carries NO summary line at
         all (a truncated run). Next to a genuine summary they may be echoed content — a
         cat'd CI log's stale FAILED line beside a green summary produced a false
-        accusation (panel 2026-07-10, C2)."""
+        accusation (panel 2026-07-10, C2). Conflicting summaries (a green summary line AND a
+        separate failure-summary line) are ambiguous, never a failure marker (audit 2026-07-10)."""
         lines = self._summary_lines()
         if lines:
+            if self._summaries_conflict(lines):
+                return False
             return any(_FAILED_COUNT.search(line) for line in lines)
         return bool(FAILED_LINE.search(self.output))
 
     @property
     def framework_green(self) -> bool:
         """The test framework's own summary reported passes and no failures."""
-        return (
-            any(_PASSED_COUNT.search(line) for line in self._summary_lines())
-            and not self.framework_failed
-        )
+        lines = self._summary_lines()
+        if self._summaries_conflict(lines):
+            return False  # conflicting summaries → ambiguous, not backed (audit 2026-07-10)
+        return any(_PASSED_COUNT.search(line) for line in lines) and not self.framework_failed
 
     @property
     def contradiction_span(self) -> str | None:
@@ -330,6 +360,12 @@ def classify_outcome(run: Run) -> tuple[str, str | None]:
     masked exit (`pytest || true`) beside a visible red summary endorsed a fake pass-claim
     (panel C7). Never an accusation either way — D4 requires a non-zero exit.
     """
+    if run._summaries_conflict(run._summary_lines()):
+        # Conflicting framework summaries (a green-only AND a separate failure-only line) are
+        # untrustworthy in EITHER exit direction: framework_failed abstains to False on a
+        # conflict, so without this a masked exit (`... || true`) would fall through to the
+        # exit-0 green branch and endorse a fake pass (audit 2026-07-10 review). Abstain.
+        return "ambiguous", "conflicting framework summaries; outcome not trustworthy"
     if run.exit_code == 0 and run.framework_failed:
         return "ambiguous", "exit 0 but the framework summary reports failures"
     if run.exit_code == 0 or run.framework_green:
@@ -397,9 +433,17 @@ _FAMILY_PATTERNS = dict(_FAMILIES)
 _TARGET_FILE_TOKEN = re.compile(r"(\S{1,500}\.(?:py|rs|go|ts|tsx|js|jsx|rb|java|cc?|cpp))(?:::(\S{1,500}))?$")
 #: pytest -k/-m (separated OR glued: `-kfoo`), go test -run. Bare-word cargo/go name
 #: filters (`cargo test my_test`) are NOT recognized — known limitation, noted in D4a.
-_TARGET_SELECT = re.compile(r"\s-(?:k|m|run)[= ]{0,8}(['\"]?)([\w~<>=. -]{1,256})\1")
+#: The value stops at whitespace / the next flag when UNQUOTED (`bare`): the old class allowed a
+#: space, so `-k foo --verbose` swallowed `--verbose` and captured `verbose` as a bogus target
+#: (audit 2026-07-10). A QUOTED value keeps spaces (`-k "foo or bar"`) — dropping that support
+#: would stop recognizing a real targeted run and could un-suppress a false accusation.
+_TARGET_SELECT = re.compile(
+    r"\s-(?:k|m|run)[= ]{0,8}"
+    r"(?:(['\"])(?P<quoted>[^'\"\n]{1,256})\1|(?P<bare>[\w~<>=.]{1,256}))"
+)
 _SELECT_SCAN_CAP = 4096
-_SELECT_STRADDLE = 16  # overlap window so a flag straddling the cap is still seen
+_SELECT_STRADDLE = 16  # lookback overlap: start the unscanned-tail check this many chars BEFORE
+#: the cap so a selector flag straddling the cap boundary is still caught (not a window width).
 _TOKEN_LENGTH_CAP = 512
 #: Option values that name what a run EXCLUDES or configures — never what it is scoped to.
 _NON_SCOPE_FLAGS = frozenset({
@@ -452,11 +496,14 @@ def target_tokens(command: str) -> set[str]:
         # appear in almost any claim, which would read as naming the target and
         # un-suppress the accusation (false CONTRADICTED — review round 3).
         out.update(
-            w for w in re.findall(r"\w+", sel.group(2))
+            w for w in re.findall(r"\w+", sel.group("quoted") or sel.group("bare") or "")
             if len(w) >= 3 and w.lower() not in _GENERIC_TOKENS
         )
-    tail = args[max(0, _SELECT_SCAN_CAP - _SELECT_STRADDLE):]
-    if len(args) > _SELECT_SCAN_CAP and ("-k" in tail or "-m" in tail or "-run" in tail):
+    # The whole unscanned remainder (cap minus the straddle lookback, through end-of-args) — NOT a
+    # bounded window. A harmless superset: it re-covers the last _SELECT_STRADDLE chars finditer
+    # already scanned, which only risks re-flagging an already-captured selector (safe).
+    unscanned = args[max(0, _SELECT_SCAN_CAP - _SELECT_STRADDLE):]
+    if len(args) > _SELECT_SCAN_CAP and ("-k" in unscanned or "-m" in unscanned or "-run" in unscanned):
         # A selector at/beyond the scan cap: mark the run targeted with a token no claim
         # can name, so the guard abstains — never the accusing direction on unscanned input.
         out.add("\x00selector-beyond-scan-cap")

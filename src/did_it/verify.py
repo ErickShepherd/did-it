@@ -29,7 +29,7 @@ from . import evidence as ev
 
 #: Shell metacharacters that enable chaining / redirection / substitution / grouping. Their
 #: mere presence disqualifies the command — we do not try to sanitize, we refuse.
-_UNSAFE = re.compile(r"[;|&<>$`(){}\n\r\\]")
+_UNSAFE = re.compile(r"[;|&<>$`(){}\n\r\\\x00]")  # \x00: NUL passed the gate then crashed subprocess (audit 2026-07-10)
 #: A leading `NAME=value` env assignment (argv[0] would be the assignment, not the runner).
 _ENV_PREFIX = re.compile(r"^\s*\w+=")
 _MAX_LEN = 4096
@@ -121,6 +121,8 @@ def is_verifiable_command(command: str) -> bool:
         if name in _FLAGS_NO_VALUE and not sep:
             continue
         return False   # unknown, glued, or code-loading flag → fail closed
+    if expect_value:
+        return False   # a trailing value-flag with no value (`pytest -k`) → fail closed
     # Same recognizer the outcome-reader uses: a runner at a command position, actually
     # executing tests. With no shell metacharacters present, that runner is the whole command.
     return ev.is_test_command(command)
@@ -143,20 +145,34 @@ def run_command(command: str, cwd: str, *, runs: int = _DEFAULT_RUNS,
             cp = subprocess.run(  # noqa: S603 — argv, shell=False, validated; the trust boundary
                 argv, cwd=cwd, shell=False, capture_output=True, text=True, timeout=timeout,
             )
-        except (subprocess.TimeoutExpired, OSError) as e:
+        except (subprocess.TimeoutExpired, OSError, ValueError) as e:
+            # ValueError: subprocess raises "embedded null byte" for a NUL in argv. The gate
+            # now rejects NUL (_UNSAFE), so this is belt-and-suspenders for the documented
+            # "Never raises" contract — any argv the OS rejects errors, never propagates.
             return VerifyResult("errored", type(e).__name__)
         output = (cp.stdout or "") + (f"\n{cp.stderr}" if cp.stderr else "")
         run = ev.Run(index=0, command=command, exit_code=cp.returncode,
                      output=output, ref="verify", is_test_run=True)
-        outcome = ev.classify_outcome(run)[0]
-        if outcome == "green":
+        # A verify UPGRADE demands POSITIVE evidence a test actually ran — a framework-green
+        # summary, not a bare exit 0. A no-op `test` script (`npm test` -> `echo ok`) exits 0
+        # with no summary and must NOT be endorsed as BACKED-verified (audit 2026-07-10).
+        # classify_outcome's bare-exit-0 green is right for transcript-time coverage but too weak
+        # for re-execution's stronger claim; a run with neither a green nor a red framework
+        # summary counts as neither, so it can never make an all-green upgrade.
+        if run.framework_green:
             greens += 1
-        elif outcome == "red":
+        elif ev.classify_outcome(run)[0] == "red":
             reds += 1
     if greens == total:
         return VerifyResult("green", f"{greens}/{total} green")
     if greens == 0 and reds > 0:
         return VerifyResult("red", f"{reds}/{total} red")
     if greens > 0:
-        return VerifyResult("flaky", f"{greens} green / {reds} red of {total}")
+        # Account for runs that were neither framework-green nor framework-red (ambiguous /
+        # errored): otherwise "1 green / 0 red of 2" omits the inconclusive run (audit 2026-07-10).
+        inconclusive = total - greens - reds
+        detail = f"{greens} green / {reds} red"
+        if inconclusive:
+            detail += f" / {inconclusive} inconclusive"
+        return VerifyResult("flaky", f"{detail} of {total}")
     return VerifyResult("errored", "no readable framework outcome")

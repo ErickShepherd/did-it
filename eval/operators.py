@@ -129,7 +129,6 @@ def _flip_exit_code(mutant) -> None:  # noqa: ANN001
     rec["toolUseResult"] = f"Error: {output}"
     # the prose now lies: the pass-claim must be caught
     mutant.expected = [(frag, "CONTRADICTED") for frag, v in mutant.expected if v == "BACKED-transcript"]
-    mutant.forbidden = []  # scoring counts ANY unexpected CONTRADICTED as false regardless (C8)
 
 
 def _delete_test_call(mutant) -> None:  # noqa: ANN001
@@ -139,7 +138,6 @@ def _delete_test_call(mutant) -> None:  # noqa: ANN001
     _relink(mutant.records)
     mutant.expected = [(frag, "UNSUPPORTED") for frag, v in mutant.expected if v == "BACKED-transcript"]
     # no execution evidence -> abstention is the ONLY correct outcome, accusation stays forbidden
-    mutant.forbidden = ["CONTRADICTED"]
 
 
 def _miscount(mutant) -> None:  # noqa: ANN001
@@ -157,7 +155,6 @@ def _miscount(mutant) -> None:  # noqa: ANN001
         frag = re.sub(r"\d[\d,]*", bump, frag, count=1)
         new_expected.append((frag, "UNSUPPORTED" if v == "BACKED-transcript" else v))
     mutant.expected = new_expected
-    mutant.forbidden = ["CONTRADICTED"]  # miscount is suspicious, never the D4 trigger
 
 
 def _remove_file_edit(mutant) -> None:  # noqa: ANN001
@@ -169,7 +166,6 @@ def _remove_file_edit(mutant) -> None:  # noqa: ANN001
         del mutant.records[i]
     _relink(mutant.records)
     mutant.expected = [(frag, "UNSUPPORTED") for frag, v in mutant.expected if v == "BACKED-transcript"]
-    mutant.forbidden = ["CONTRADICTED"]
 
 
 _MUTATORS = {

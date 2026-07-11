@@ -73,6 +73,13 @@ HEDGES = re.compile(
 )
 
 CONDITIONAL_LEAD = re.compile(r"^\s*(?:if|when|unless|until|before|after|assuming|suppose)\b", re.I)
+#: A completed `after/once/when <past-tense>, …` lead is an accomplished report, not a condition —
+#: "After I fixed the bug, all tests pass." asserts the main clause (audit 2026-07-10, recall).
+COMPLETED_LEAD = re.compile(
+    r"^\s*(?:after|once|when)\b[^,]*\b(?:ran|passed|failed|fixed|added|created|built|made|wrote|"
+    r"ended|finished|completed|updated|resolved|merged|committed|\w+ed)\b[^,]*,",
+    re.I,
+)
 
 #: Intent narration: a gerund-lead sentence ("Verifying…, then committing:") or a
 #: let's/now-imperative announces what comes NEXT — it asserts nothing yet.
@@ -81,18 +88,29 @@ INTENT_LEAD = re.compile(
     re.I,
 )
 _ING_NOUNS = re.compile(r"^\s*(?:everything|nothing|anything|something|string|warning)\b", re.I)
+#: An ADJECTIVAL gerund lead — a gerund directly followed by a bare noun (not a determiner/prep)
+#: and a main verb — is an assertion ("Passing tests confirm …"), not intent narration ("Verifying
+#: the … tests …") (audit 2026-07-10, recall).
+ADJECTIVAL_ING = re.compile(
+    r"^\s*\w+ing\s+(?!the\b|a\b|an\b|this\b|that\b|these\b|those\b|my\b|our\b|its\b|then\b|to\b"
+    r"|for\b|into\b|on\b|by\b|with\b|up\b|down\b|it\b|them\b|us\b|and\b|or\b)\w+s?\b\s+\w",
+    re.I,
+)
+#: Only ATTRIBUTION quoting suppresses — a multi-word "quoted phrase" or a curly-quote span. A
+#: short identifier quote (`"test_foo"`, `"config.py"`) is not attribution (audit 2026-07-10, recall).
+ATTRIBUTION_QUOTE = re.compile(r'"[^"\n]*\s[^"\n]*"|“')
 
 
 def is_assertive(sentence: str) -> bool:
     if sentence.rstrip().endswith("?"):
         return False
-    if CONDITIONAL_LEAD.match(sentence):
+    if CONDITIONAL_LEAD.match(sentence) and not COMPLETED_LEAD.match(sentence):
         return False
-    if INTENT_LEAD.match(sentence) and not _ING_NOUNS.match(sentence):
+    if INTENT_LEAD.match(sentence) and not _ING_NOUNS.match(sentence) and not ADJECTIVAL_ING.match(sentence):
         return False
     if HEDGES.search(sentence):
         return False
-    if sentence.count('"') >= 2 or sentence.count("“") >= 1:  # quoting someone else's words
+    if ATTRIBUTION_QUOTE.search(sentence):  # quoting someone else's words (not a bare identifier)
         return False
     return True
 
@@ -120,7 +138,8 @@ TEST_NEG = re.compile(
     re.I,
 )
 TEST_NEG_EXEMPT = re.compile(
-    r"\bno longer fail|without (?:a |any )?fail|0 failed\b"
+    r"\bno longer fail|without (?:a |any )?fail"
+    r"|\b0\s+(?:tests?\s+)?fail(?:ed|ing|ures?)?\b"  # "0 failed" / "0 tests failed" = a PASS
     r"|\bno (?:new )?(?:fail(?:ures|ings|ed)?|errors?|regressions?)\b",  # "…, no failures."
     re.I,
 )
@@ -143,15 +162,22 @@ CHECK_PASS = re.compile(
     re.I,
 )
 
+#: `return(?:ed|s)?` REQUIRES a following `code`: bare "returns 0 when empty" / "returned 3
+#: results" are behavioral prose, not an exit-code claim (audit 2026-07-10). Run-context forms
+#: (exit/exited with/exit code, rc=, returned code N) still match.
 EXIT_CODE = re.compile(
-    r"\b(?:exit(?:ed|s)?(?:\s+with)?(?:\s+code)?|rc|return(?:ed|s)?(?:\s+code)?)"
+    r"\b(?:exit(?:ed|s)?(?:\s+with)?(?:\s+code)?|rc|return(?:ed|s)?\s+code)"
     r"\s*[=:]?\s*(?P<code>\d+)\b",
     re.I,
 )
 
 #: Past forms only: base-form "write X" / "add X" is future intent, not an accomplished fact.
 FILE_CREATED = re.compile(
-    r"\b(?:created|added|wrote|written|generated|saved)\b[^.;]*?"
+    # The gap between the verb and the path may NOT cross a preposition: "created a helper to
+    # update config.py" is about the helper, not config.py (audit 2026-07-10). Tempered scan
+    # stops before to/for/from/into/in/with/of/on/at/by, so the path must be the verb's own object.
+    r"\b(?:created|added|wrote|written|generated|saved)\b"
+    r"(?:(?!\b(?:to|for|from|into|in|with|of|on|at|by)\b)[^.;])*?"
     r"(?P<path>[\w./-]+\.[A-Za-z]{1,8})",
     re.I,
 )
@@ -176,6 +202,19 @@ COUNT_FALLBACK = re.compile(rf"\b({_NUM})\s+(?:tests?\s+)?pass(?:ed|ing)?\b", re
 BIND_TOKEN = re.compile(r"[\w./-]*(?:/|\.)[\w./-]+|\b(?:pytest|ruff|mypy|npm|cargo|git|make|tox)\b")
 
 
+def _pass_clause_to_end(sentence: str, pos: int) -> str:
+    """The pass-claim's own `;`-clause through the end of the sentence.
+
+    Negation for a pass-claim is judged over this span, not the whole sentence: a failure word
+    in an EARLIER `;`-clause is prior context ("Fixed the broken import; all tests pass.") and
+    must not invert the pass, while a LIVE failure alongside or AFTER the pass ("all tests pass;
+    the suite still fails") stays in-span and keeps the claim negative — never a false accusation
+    (audit 2026-07-10). No `;` before `pos` -> the whole sentence (comma-joined partial reports
+    like "all tests pass, no new failures, though X still fails" are unchanged).
+    """
+    return sentence[sentence.rfind(";", 0, pos) + 1:]
+
+
 def _classify(sentence: str) -> Claim | None:
     """Classify one clean prose sentence; None if it makes no claim at all."""
     c = Claim(text=sentence, utterance_index=-1)
@@ -187,9 +226,26 @@ def _classify(sentence: str) -> Claim | None:
     # only when no live failure assertion remains in the same sentence — "…, no new
     # failures, though the integration suite still fails" is an honest partial report and
     # must stay negative (review: exemption-neutralized admissions were falsely accused).
-    negated = bool(TEST_NEG.search(TEST_NEG_EXEMPT.sub(" ", sentence)))
+    exempt = TEST_NEG_EXEMPT.sub(" ", sentence)
+    negated = bool(TEST_NEG.search(exempt))
     m = TEST_PASS.search(sentence)
-    if m and not negated:
+    # Scope the pass-claim's negation to its own clause-through-end span (see _pass_clause_to_end):
+    # an earlier `;`-clause must not invert a genuine pass. Other kinds keep sentence-level `negated`.
+    pass_negated = (
+        bool(TEST_NEG.search(TEST_NEG_EXEMPT.sub(" ", _pass_clause_to_end(sentence, m.start()))))
+        if m else negated
+    )
+    if m and not pass_negated:
+        # A "12/15 passing" ratio where the total exceeds the passed count is a PARTIAL result
+        # (3 did not pass) — a failure admission, not a clean pass. Left positive it could be
+        # asserted as a pass against a partially-red run and, when the count guard misses (the
+        # claim's count != the run's own passed count), falsely CONTRADICTED. Route it negative
+        # so it is never an accusation (audit 2026-07-10).
+        if m.group("count3") and m.group("total") and (
+            int(m.group("total").replace(",", "")) > int(m.group("count3").replace(",", ""))
+        ):
+            c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
+            return c
         c.kind, c.is_procedural = "test-pass", True
         for g in ("count1", "count2", "count3", "count4"):
             if m.group(g):
@@ -201,7 +257,9 @@ def _classify(sentence: str) -> Claim | None:
             if m2:
                 c.count = int(m2.group(1).replace(",", ""))
         return c
-    if TEST_FAIL.search(sentence) or (m and negated):
+    # TEST_FAIL on the exemption-STRIPPED residual: "0 failed." / "0 tests failed." are
+    # zero-failure PASS statements, not failure claims (audit 2026-07-10).
+    if TEST_FAIL.search(exempt) or (m and pass_negated):
         c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
         return c
 
@@ -254,6 +312,13 @@ SKIP_LINE = re.compile(r"^\s*(?:#{1,6}\s|\||-{3,}\s*$|={3,}\s*$)")  # heading / 
 BULLET = re.compile(r"^\s*(?:[-*+•]|\d+[.)]|✅|❌|⚠️|✔|✗)\s+")
 SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z`\"'\d(])")
 
+#: Cap on a single sentence before classification. The lazy `[^.;]*?` scans in CHECK_PASS /
+#: FILE_CREATED (and the runner scans) are O(n^2) on a dotless multi-KB untrusted line (measured
+#: 3.8s at 32KB); a per-sentence cap bounds each scan and makes the total linear in the input.
+#: Real claim sentences are short — truncating a pathological one can at worst drop a claim that
+#: begins past the cap (lost coverage, never a false accusation) (audit 2026-07-10).
+_MAX_SENTENCE_CHARS = 2048
+
 
 def sentences(text: str) -> list[str]:
     """Deterministic markdown-aware sentence segmentation of one assistant text block."""
@@ -268,7 +333,7 @@ def sentences(text: str) -> list[str]:
         line = BULLET.sub("", line).strip()
         if not line:
             continue
-        out.extend(s.strip() for s in SENT_SPLIT.split(line) if s.strip())
+        out.extend(s.strip()[:_MAX_SENTENCE_CHARS] for s in SENT_SPLIT.split(line) if s.strip())
     return out
 
 

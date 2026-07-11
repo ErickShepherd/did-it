@@ -41,7 +41,8 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
         return _absent(claim, session, "no valid test run at utterance-time")
     if e.outcome == "green":
         if claim.polarity == "negative":
-            return _receipt(claim, Verdict.UNSUPPORTED, note="last test run was green")
+            # pass `e`: this receipt carries the same evidence linkage as its siblings (audit 2026-07-10)
+            return _receipt(claim, Verdict.UNSUPPORTED, e, note="last test run was green")
         run = _run_for(index, e)
         observed = ev.summary_passed_count(run) if run else None
         if claim.count is not None and observed is not None and observed != claim.count:
@@ -55,7 +56,17 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
             return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e, note="failure honestly reported")
         return _receipt(claim, Verdict.UNSUPPORTED, e, note=e.note)
     if e.outcome == "red":
+        if claim.kind != "test-pass":
+            # The sole accusation is reserved for a claimed test-PASS (design D4a / the module
+            # docstring: "test-pass only"). Gating on polarity alone would let a mislabeled
+            # positive-polarity test-fail — or any future positive kind routed here — accuse
+            # with no guard. Fail closed: never accuse a non-test-pass kind (audit 2026-07-10).
+            return _receipt(claim, Verdict.UNSUPPORTED, e, note="accusation reserved for test-pass claims")
         run = _run_for(index, e)
+        # `run` is guaranteed by find_evidence (e was built from a run in this index), so the
+        # else is unreachable today — kept as an INTENTIONAL defensive fallback: if a future
+        # refactor ever decoupled them, this fails closed (a suppression reason -> UNSUPPORTED),
+        # never a crash or an accusation on the #1-non-negotiable path (audit 2026-07-10).
         guard = ev.accusation_guard(index, claim, run) if run else "red run not found in index"
         if guard:
             return _receipt(claim, Verdict.UNSUPPORTED, e, note=guard)
@@ -148,7 +159,14 @@ def reconcile(claims, session, *, verify_repo: str | None = None) -> list[Receip
         if not claim.is_procedural:
             receipts.append(_receipt(claim, Verdict.NOT_CHECKABLE, note="semantic claim (v1 non-goal)"))
             continue
-        receipts.append(_BY_KIND[claim.kind](claim, session, index))
+        handler = _BY_KIND.get(claim.kind)
+        if handler is None:
+            # An unmapped procedural kind fails CLOSED to UNSUPPORTED, never a KeyError crash
+            # (fail-loud) — currently unreachable, defensive per the fail-closed contract (audit
+            # 2026-07-10).
+            receipts.append(_receipt(claim, Verdict.UNSUPPORTED, note=f"unmapped procedural kind: {claim.kind!r}"))
+            continue
+        receipts.append(handler(claim, session, index))
     if verify_repo is not None:
         _apply_verification(zip(claims, receipts), index, verify_repo)
     return receipts
@@ -176,7 +194,13 @@ def _apply_verification(pairs, index: ev.Index, repo: str) -> None:  # noqa: ANN
         if not verify.is_verifiable_command(run.command):
             receipt.notes.append("--verify: skipped (command is not a pure test-runner invocation)")
             continue
-        result = ran.get(run.ref) or ran.setdefault(run.ref, verify.run_command(run.command, repo))
+        # Memoize by ref explicitly (not `get() or setdefault(...)`): the command has real side
+        # effects and must run at most once per ref. The old form relied on VerifyResult being
+        # truthy AND still eagerly evaluated run_command inside setdefault even when cached — a
+        # falsy result would re-run it (audit 2026-07-10).
+        if run.ref not in ran:
+            ran[run.ref] = verify.run_command(run.command, repo)
+        result = ran[run.ref]
         if result.status == "green":
             receipt.verdict = Verdict.BACKED_VERIFIED
             receipt.notes.append(f"--verify: re-ran in {repo} — {result.detail}")

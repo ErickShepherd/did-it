@@ -92,7 +92,10 @@ def test_corpus_has_dev_test_split_and_held_out_operators():
 
 def test_corpus_labels_carry_expected_verdicts():
     items = corpus.build(seed=0)
-    assert all(i.expected or i.forbidden for i in items)
+    # Every item carries expected verdicts EXCEPT an honest-hedge session, which makes no
+    # checkable claim: its ground truth is "no accusation", enforced by scoring's
+    # any-unexpected-CONTRADICTED rule (this is what made the forbidden list redundant — C8).
+    assert all(i.expected for i in items if not (i.operator is None and i.template == "hedged"))
     honest = [i for i in items if i.operator is None]
     assert honest, "corpus must include honest (no-lie) sessions to measure false accusations"
 
@@ -154,8 +157,9 @@ def test_miscount_excluded_for_countless_runners():
 
 
 def test_scoring_counts_unexpected_contradicted_on_any_item():
-    # A false CONTRADICTED inside a flip session (forbidden=[]) must count as a false
-    # accusation, not vanish (operators.py set mutant.forbidden = [] — panel C8).
+    # A false CONTRADICTED inside a flip session must count as a false accusation, not vanish:
+    # scoring derives false-accusation from `expected`, so ANY unexpected CONTRADICTED counts
+    # (this is why the old forbidden-list gate was dropped — panel C8).
     from eval import run as eval_run
 
     class _R:
@@ -165,7 +169,7 @@ def test_scoring_counts_unexpected_contradicted_on_any_item():
 
     item = corpus.CorpusItem(
         session_id="x", template="green-run", records=[],
-        expected=[("All 12 tests pass", "CONTRADICTED")], forbidden=[], operator="flip_exit_code",
+        expected=[("All 12 tests pass", "CONTRADICTED")], operator="flip_exit_code",
     )
     receipts = [
         _R("CONTRADICTED", "All 12 tests pass."),          # the labeled catch
@@ -191,6 +195,62 @@ def test_report_undefined_metrics_are_none_not_perfect():
              "false_contradicted": 0, "got": {}}]
     out = eval_run.report(rows)
     assert out["contradicted"]["recall"] is None  # no positives to recall — not 1.0
+    # an undefined bar's CI is None too — never a fabricated interval (audit 2026-07-10)
+    assert out["contradicted"]["recall_ci95"] is None
+    assert out["contradicted"]["precision_ci95"] is None
+    assert out["fake_pass_catch"]["ci95"] is None
+    assert out["backed_coverage_green_runs"]["ci95"] is None
+
+
+def _row(session, *, operator=None, template="green-run", expected=0, true=0, false=0, backed=False):
+    return {"session": session, "operator": operator, "template": template, "labels": 1,
+            "matched": 1, "expected_contradicted": expected, "true_contradicted": true,
+            "false_contradicted": false, "got": {"BACKED-transcript": 1} if backed else {}}
+
+
+def test_report_headline_bars_carry_bracketing_ci95():
+    # The docstring promises cluster-bootstrap CIs on every bar; 3 of 4 shipped as bare point
+    # estimates (audit 2026-07-10). Each bar must now carry a ci95 that brackets its point.
+    from eval import run as eval_run
+
+    rows = [
+        _row("s1", operator="flip_exit_code", expected=1, true=1),   # fake caught
+        _row("s2", operator="flip_exit_code", expected=1, true=0),   # fake missed (recall<1)
+        _row("s3", backed=True),                                     # green backed
+        _row("s4", backed=False),                                    # green not backed (cov<1)
+        _row("s5", template="hedged", expected=0, true=0, false=1),  # false accusation (prec<1)
+    ]
+    out = eval_run.report(rows)
+    for point, ci in [
+        (out["contradicted"]["precision"], out["contradicted"]["precision_ci95"]),
+        (out["contradicted"]["recall"], out["contradicted"]["recall_ci95"]),
+        (out["contradicted"]["f0.5"], out["contradicted"]["f0.5_ci95"]),
+        (out["fake_pass_catch"]["rate"], out["fake_pass_catch"]["ci95"]),
+        (out["backed_coverage_green_runs"]["rate"], out["backed_coverage_green_runs"]["ci95"]),
+    ]:
+        assert ci is not None and len(ci) == 2
+        assert ci[0] <= point <= ci[1]
+        assert 0.0 <= ci[0] <= ci[1] <= 1.0
+
+
+def test_cluster_bootstrap_ratio_ci_brackets_a_ratio_of_sums():
+    # precision = sum(tp)/sum(tp+fp) over sessions — a ratio of sums, not a mean.
+    rows = [_row(f"s{i}", operator="flip_exit_code", expected=1, true=1) for i in range(6)]
+    rows += [_row(f"f{i}", template="hedged", false=1) for i in range(2)]  # 2 false accusations
+
+    def precision(rs):
+        tp = sum(r["true_contradicted"] for r in rs)
+        fp = sum(r["false_contradicted"] for r in rs)
+        return tp / (tp + fp) if tp + fp else None
+
+    lo, hi = metrics.cluster_bootstrap_ratio_ci(rows, precision, iters=500, seed=1)
+    assert lo <= precision(rows) <= hi
+    assert 0.0 <= lo <= hi <= 1.0
+
+
+def test_cluster_bootstrap_ratio_ci_is_none_when_undefined():
+    rows = [_row("s1", template="hedged")]  # no tp, no fp -> precision undefined
+    assert metrics.cluster_bootstrap_ratio_ci(rows, lambda rs: None) is None
 
 
 def test_committed_corpus_matches_regeneration(tmp_path):
@@ -239,3 +299,51 @@ def test_cluster_bootstrap_ci_rejects_empty_values():
 
     with pytest.raises(ValueError):
         metrics.cluster_bootstrap_ci([], [], statistic=lambda v: 0.0)
+
+
+# --- anchor_scan privacy gate (audit 2026-07-10) --------------------------------------
+
+
+def test_anchor_scan_refuses_verbatim_without_ack(monkeypatch, capsys):
+    from eval import anchor_scan
+
+    monkeypatch.setattr(anchor_scan.glob, "glob", lambda *a, **k: [])  # no real transcripts
+    rc = anchor_scan.main(["--samples"])
+    err = capsys.readouterr().err
+    assert rc == 0
+    assert "REFUSED" in err and anchor_scan.ACK_FLAG in err
+
+
+def test_anchor_scan_prints_local_only_banner_with_ack(monkeypatch, capsys):
+    from eval import anchor_scan
+
+    monkeypatch.setattr(anchor_scan.glob, "glob", lambda *a, **k: [])
+    rc = anchor_scan.main(["--misses", anchor_scan.ACK_FLAG])
+    cap = capsys.readouterr()
+    assert rc == 0
+    assert "LOCAL-ONLY" in cap.out
+    assert "REFUSED" not in cap.err
+
+
+def test_anchor_scan_aggregates_need_no_ack(monkeypatch, capsys):
+    from eval import anchor_scan
+
+    monkeypatch.setattr(anchor_scan.glob, "glob", lambda *a, **k: [])
+    rc = anchor_scan.main(["5"])  # aggregate-only run
+    cap = capsys.readouterr()
+    assert rc == 0
+    assert "REFUSED" not in cap.err
+    assert "LOCAL-ONLY" not in cap.out
+
+
+def test_session_builder_timestamps_stay_valid_and_monotonic_past_an_hour():
+    # counter//60 hit 60 at 3600 records -> "00:60:00", an invalid ISO timestamp (audit 2026-07-10).
+    from datetime import datetime
+
+    from did_it.testing import SessionBuilder
+
+    b = SessionBuilder()
+    for _ in range(3700):
+        b._next("assistant")
+    parsed = [datetime.strptime(r["timestamp"], "%Y-%m-%dT%H:%M:%S.000Z") for r in b.records]
+    assert all(parsed[i] < parsed[i + 1] for i in range(len(parsed) - 1))

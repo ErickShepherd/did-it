@@ -29,9 +29,7 @@ def check(path: str | Path, *, verify_repo: str | None = None) -> list[Receipt]:
     from . import extraction, reconcile, transcript
     from .verdicts import Verdict
 
-    try:
-        session = transcript.parse(path)
-    except (transcript.UnknownSchema, transcript.ParseFailure) as e:
+    def _not_evaluable(e: Exception) -> list[Receipt]:
         return [
             Receipt(
                 claim_text="(entire session)",
@@ -39,8 +37,25 @@ def check(path: str | Path, *, verify_repo: str | None = None) -> list[Receipt]:
                 notes=[f"{type(e).__name__}: {e}"],
             )
         ]
-    claims = extraction.extract_claims(session)
-    return reconcile.reconcile(claims, session, verify_repo=verify_repo)
+
+    try:
+        session = transcript.parse(path)
+    except (transcript.UnknownSchema, transcript.ParseFailure) as e:
+        return _not_evaluable(e)
+    except OSError:
+        # Missing/unreadable file is a usage error, not an adjudication — propagate (contract).
+        raise
+    except Exception as e:  # noqa: BLE001 — top-level fail-closed backstop (audit 2026-07-10)
+        # Any other parse-stage crash (RecursionError, ValueError, MemoryError, …) must fail
+        # closed to one session-level NOT-EVALUABLE receipt, never raise to library callers.
+        return _not_evaluable(e)
+    try:
+        claims = extraction.extract_claims(session)
+        return reconcile.reconcile(claims, session, verify_repo=verify_repo)
+    except Exception as e:  # noqa: BLE001 — top-level fail-closed backstop (audit 2026-07-10)
+        # Unexpected crash in extraction/reconcile becomes NOT-EVALUABLE, never a raise: the
+        # documented fail-closed contract, belt-and-suspenders behind the per-boundary fixes.
+        return _not_evaluable(e)
 
 
 __all__ = ["Receipt", "Verdict", "check", "__version__"]

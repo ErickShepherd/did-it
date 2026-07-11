@@ -60,3 +60,40 @@ def cluster_bootstrap_ci(
     lo = stats[int((alpha / 2) * len(stats))]
     hi = stats[min(int((1 - alpha / 2) * len(stats)), len(stats) - 1)]
     return lo, hi
+
+
+def cluster_bootstrap_ratio_ci(
+    rows: Sequence[dict],
+    statistic: Callable[[Sequence[dict]], float | None],
+    group_key: str = "session",
+    iters: int = 2000,
+    alpha: float = 0.05,
+    seed: int = 0,
+) -> tuple[float, float] | None:
+    """Percentile bootstrap CI for a statistic that is a FUNCTION OF SESSION ROWS — e.g. a
+    ratio-of-sums like precision = sum(tp)/sum(tp+fp), or a subset rate. Resamples whole session
+    CLUSTERS with replacement (same effective-n rationale as cluster_bootstrap_ci), recomputing
+    the ratio on each resample. Returns None (never a fabricated interval) when the point
+    statistic is undefined, and skips resamples whose statistic is undefined (e.g. an empty
+    subset), so an all-empty draw can't crash the percentile."""
+    if not rows or statistic(rows) is None:
+        return None
+    by_group: dict = defaultdict(list)
+    for r in rows:
+        by_group[r[group_key]].append(r)
+    keys = sorted(by_group, key=repr)
+    rng = random.Random(seed)
+    stats: list[float] = []
+    for _ in range(iters):
+        sample: list[dict] = []
+        for _ in keys:
+            sample.extend(by_group[rng.choice(keys)])
+        s = statistic(sample)
+        if s is not None:
+            stats.append(s)
+    if not stats:
+        return None
+    stats.sort()
+    lo = stats[int((alpha / 2) * len(stats))]
+    hi = stats[min(int((1 - alpha / 2) * len(stats)), len(stats) - 1)]
+    return lo, hi

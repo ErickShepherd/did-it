@@ -19,3 +19,5 @@ eval/anchor/*
 
 # Local scratch
 tmp/
+.claude/settings.local.json
+scripts/.leakgate-names.local
