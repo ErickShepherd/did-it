@@ -115,6 +115,15 @@ class TestVersionParsingFailsClosed:
     def test_valid_version_still_parses(self):
         assert transcript._version_tuple("2.1.204") == (2, 1, 204)
 
+    def test_non_semver_int_forms_return_none(self):
+        # int() accepts underscore digit-separators, leading '+'/'-', and surrounding
+        # whitespace — all laxer than semver. "2.1.2_07" -> int("2_07") == 207 would
+        # silently parse as a supported version; these must fail closed to None.
+        assert transcript._version_tuple("2.1.2_07") is None
+        assert transcript._version_tuple("2.1.+7") is None
+        assert transcript._version_tuple("2.1. 7") is None
+        assert transcript._version_tuple("2.1.-7") is None
+
     def test_crafted_version_record_is_unknownschema_not_a_crash(self, tmp_path):
         import json
 

@@ -54,13 +54,18 @@ def _version_tuple(v: str) -> tuple[int, int, int] | None:
     parts = v.split(".")
     if len(parts) != 3:
         return None
+    # Reject anything laxer than semver before int() sees it: int() accepts underscore
+    # digit-separators ("2_07" -> 207), leading '+'/'-', and surrounding whitespace, any of
+    # which would silently parse a non-semver string as a supported version. `isascii()`
+    # also excludes Unicode digits (`'²'.isdigit()` is True) that int() would reject anyway.
+    if not all(p.isascii() and p.isdigit() for p in parts):
+        return None
     try:
         return (int(parts[0]), int(parts[1]), int(parts[2]))
     except ValueError:
-        # Fail closed to "unsupported", never crash. The old `str.isdigit()` gate accepted
-        # Unicode digits (`'²'.isdigit()` is True) that int() rejects, and even `.isdecimal()`
-        # would not stop a huge all-decimal part from tripping int()'s int_max_str_digits
-        # limit — both raised an uncaught ValueError on a crafted version.
+        # Fail closed to "unsupported", never crash. Even an all-decimal part that clears the
+        # isdigit() gate can trip int()'s int_max_str_digits limit on a huge crafted version,
+        # so keep the ValueError backstop.
         return None
 
 
