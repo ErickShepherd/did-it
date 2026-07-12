@@ -62,6 +62,21 @@ class TestIsTestCommand:
         assert not is_test_command("pytest --version")
         assert not is_test_command("pytest --version && echo done")
 
+    def test_newline_separated_version_does_not_drop_the_test_run(self):
+        # Bash treats a newline like `;`: a `--version` on a SEPARATE line is a separate
+        # sub-command and must not suppress a real runner. Both operand orderings.
+        assert is_test_command("pytest tests/\nnode build.js --version")
+        assert is_test_command("node build.js --version\npytest tests/")
+
+    def test_backgrounded_version_does_not_drop_the_test_run(self):
+        # `&` backgrounds the preceding command — also a clause boundary.
+        assert is_test_command("node build.js --version & pytest tests/")
+
+    def test_runner_clause_isolates_the_runner_across_a_newline(self):
+        # _runner_clause underlies target_tokens: it must return only the runner's own
+        # sub-command, not a neighbouring line, so scopes aren't read across a newline.
+        assert target_tokens("cd /work\npytest tests/test_foo.py") == {"test_foo.py"}
+
 
 class TestTemporalGuardRelevance:
     def test_doc_only_edit_does_not_void_a_green_run(self, tmp_path):

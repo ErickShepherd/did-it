@@ -88,6 +88,16 @@ def _stripped(command: str) -> str:
     return QUOTED.sub(" ", HEREDOC.sub(" ", command))
 
 
+#: Bash sub-command separators, including newline and bare `&` (bash treats a newline like
+#: `;`, and `&` backgrounds the preceding command). Omitting them lumped a multi-line or
+#: backgrounded `--version` clause in with a real runner's clause and dropped its green run
+#: (false CONTRADICTED). `&&` precedes `&` in the alternation so a chain operator is never
+#: split into two. Splitting first means the per-clause runner scan never sees these anchors,
+#: so the `_strippable` linearity cap (which bounds `\n`) is preserved, not weakened. Shared
+#: by `is_test_command` and `_runner_clause` so the two can't drift to different separator sets.
+_CLAUSE_SEP = re.compile(r"&&|\|\||;|\||\n|&")
+
+
 def is_test_command(command: str) -> bool:
     """True if the Bash command actually EXECUTES a test runner (not merely mentions one).
 
@@ -100,7 +110,7 @@ def is_test_command(command: str) -> bool:
         return False
     return any(
         TEST_RUNNERS.search(clause) and not _NON_EXECUTING.search(clause)
-        for clause in re.split(r"&&|\|\||;|\|", _stripped(command))
+        for clause in _CLAUSE_SEP.split(_stripped(command))
     )
 
 #: Test-framework outcome markers, deliberately narrow (anchor calibration: compound
@@ -473,7 +483,7 @@ def runner_family(command: str) -> str | None:
 
 def _runner_clause(command: str) -> str:
     """The sub-command of a compound line that actually invokes the runner."""
-    for clause in re.split(r"&&|\|\||;|\|", command):
+    for clause in _CLAUSE_SEP.split(command):
         if TEST_RUNNERS.search(clause):
             return clause
     return command
