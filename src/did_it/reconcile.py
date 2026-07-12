@@ -131,7 +131,7 @@ def _exit_code(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
         return _absent(claim, session, "no command run at utterance-time")
     run = runs[-1]
     e = ev.Evidence(tool="Bash", ref=run.ref, exit_code=run.exit_code, at_index=run.index, tier="witness")
-    if run.exit_code == claim.count:
+    if claim.count is not None and run.exit_code == claim.count:
         return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e)
     return _receipt(claim, Verdict.UNSUPPORTED, e, note=f"last run exited {run.exit_code}, claim says {claim.count}")
 

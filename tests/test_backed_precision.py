@@ -270,6 +270,32 @@ class TestExitCodeRunContextOnly:
             assert c is not None and c.kind == "exit-code", s
 
 
+class TestExitCodeNoneCountDoesNotFalselyBack:
+    """An exit-code claim with no stated count (`count=None`) reconciled against an
+    ERRORED run (`exit_code=None` — is_error with no parsable code) must not collapse
+    `None == None` into a false BACKED-transcript. Extraction always sets count on the
+    live path today, but the reconcile handler must not endorse on absent-vs-absent
+    (fail-closed, like the unmapped-kind guard)."""
+
+    def test_none_count_vs_errored_run_is_not_backed(self, tmp_path):
+        from did_it import evidence, extraction, transcript
+        from did_it.reconcile import _exit_code
+
+        b = SessionBuilder()
+        b.user_text("run it")
+        # is_error result whose output has no "Exit code N" prefix -> exit_code=None.
+        b.tool_call("Bash", {"command": "pytest -q"}, "Segmentation fault", is_error=True)
+        b.assistant_text("done")
+        session = transcript.parse(b.write_jsonl(tmp_path / "t.jsonl"))
+        index = evidence.build_index(session)
+        assert index.runs_before(999)[-1].exit_code is None  # the run really errored
+
+        claim = extraction.Claim(text="exit code", utterance_index=999,
+                                 kind="exit-code", is_procedural=True, count=None)
+        receipt = _exit_code(claim, session, index)
+        assert receipt.verdict != Verdict.BACKED_TRANSCRIPT
+
+
 class TestPartialPassRatio:
     """`N/M passing` with M > N is a partial-failure admission, not a clean pass. Left positive it
     could be asserted against a partially-red run and falsely CONTRADICTED when the count guard
