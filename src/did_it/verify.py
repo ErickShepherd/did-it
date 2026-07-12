@@ -143,6 +143,7 @@ def run_command(command: str, cwd: str, *, runs: int = _DEFAULT_RUNS,
         try:
             cp = subprocess.run(  # noqa: S603 — argv, shell=False, validated; the trust boundary
                 argv, cwd=cwd, shell=False, capture_output=True, text=True, timeout=timeout,
+                errors="replace",  # non-UTF-8 child byte must not drop a real green run
             )
         except (subprocess.TimeoutExpired, OSError, ValueError) as e:
             # ValueError: subprocess raises "embedded null byte" for a NUL in argv. The gate

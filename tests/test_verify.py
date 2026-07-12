@@ -170,6 +170,17 @@ class TestExecutorAggregation:
         assert result.status != "green"
         assert result.status == "errored"
 
+    def test_non_utf8_byte_does_not_drop_a_green_run(self, monkeypatch):
+        # A real runner can emit a non-UTF-8 byte alongside a genuine green summary (e.g. a
+        # progress glyph in a foreign locale). Strict decode raised UnicodeDecodeError (a
+        # ValueError) -> the green run was miscounted as `errored`, a false negative. With
+        # errors="replace" the summary survives and the run stays green.
+        monkeypatch.setattr(verify, "is_verifiable_command", lambda c: True)
+        prog = r"import sys; sys.stdout.buffer.write(b'3 passed in 0.01s\n\xff')"
+        cmd = f'{sys.executable} -c "{prog}"'
+        result = verify.run_command(cmd, ".", runs=1)
+        assert result.status == "green"
+
     def test_runs_with_shell_false_and_argv(self, monkeypatch):
         seen = {}
         class _CP:
