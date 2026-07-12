@@ -109,6 +109,42 @@ class TestVersionParsingFailsClosed:
             transcript.parse(p)
 
 
+class TestSupportedRangeEndpoints:
+    """SRV5 — the version gate is pinned on BOTH sides: each range endpoint parses in-range, and
+    the version one step outside each endpoint fails closed to UnknownSchema. A consistency test
+    keeps SUPPORTED_SCHEMA_VERSIONS from drifting away from SUPPORTED_SCHEMA_RANGE's endpoints
+    (the two constants move together or not at all).
+    Policy: docs/design/schema-range-validation.md (SRV1, SRV5).
+    """
+
+    def _session_at(self, tmp_path, version) -> Path:
+        b = SessionBuilder(version=version)
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("All 12 tests pass.")
+        return b.write_jsonl(tmp_path / "t.jsonl")
+
+    @pytest.mark.parametrize("version", ["2.1.156", "2.1.207"])
+    def test_range_endpoints_parse_in_range(self, tmp_path, version):
+        session = transcript.parse(self._session_at(tmp_path, version))
+        assert session.schema_version == version
+        assert session.records  # ingested, not failed closed
+
+    @pytest.mark.parametrize("version", ["2.1.155", "2.1.208"])
+    def test_one_step_outside_each_endpoint_is_unknownschema(self, tmp_path, version):
+        with pytest.raises(transcript.UnknownSchema):
+            transcript.parse(self._session_at(tmp_path, version))
+
+    def test_supported_versions_render_the_range_endpoints(self):
+        # SUPPORTED_SCHEMA_VERSIONS is a scaffold-compat mirror of the range's endpoints; a bump
+        # that edits one constant but not the other must fail here, not ship a silent mismatch.
+        lo, hi = transcript.SUPPORTED_SCHEMA_RANGE
+        assert transcript.SUPPORTED_SCHEMA_VERSIONS == (
+            ".".join(map(str, lo)),
+            ".".join(map(str, hi)),
+        )
+
+
 def verdict_of(receipts, fragment):
     (r,) = [x for x in receipts if fragment in x.claim_text]
     return r.verdict
