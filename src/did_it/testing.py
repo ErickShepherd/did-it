@@ -145,10 +145,13 @@ class SessionBuilder:
         return self.tool_call("Task", {"prompt": prompt, "description": "subtask"}, result)
 
     def noise(self) -> None:
-        """Non-message record types real transcripts contain; parsers must skip them."""
-        self.records.append({"type": "queue-operation", "operation": "enqueue",
-                             "timestamp": "2026-01-01T00:00:00.000Z", "sessionId": "fixture-session"})
-        self.records.append({"type": "ai-title", "title": "Fixture session"})
+        """Non-message record types real transcripts contain; parsers must skip them.
+
+        Routed through _next() so a mid-session call keeps the builder's monotonic-timestamp
+        contract (the old direct-append planted a stale 00:00:00 / timestamp-less record).
+        """
+        self._next("queue-operation", operation="enqueue")
+        self._next("ai-title", title="Fixture session")
 
     # -- output -----------------------------------------------------------------
 

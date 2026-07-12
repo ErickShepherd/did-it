@@ -164,6 +164,21 @@ def test_non_message_record_types_are_skipped(tmp_path):
     assert verdict_of(receipts, "tests pass") == Verdict.BACKED_TRANSCRIPT
 
 
+def test_noise_mid_session_keeps_timestamps_monotonic():
+    # noise() called after real records must not plant a stale/absent timestamp: the old
+    # implementation appended a hardcoded 00:00:00 queue-operation (earlier than its neighbors)
+    # and a timestamp-less ai-title, breaking the builder's monotonic-timestamp contract.
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "3 passed in 0.10s")
+    b.noise()
+    b.assistant_text("All 3 tests pass.")
+    assert all("timestamp" in r for r in b.records)
+    stamps = [r["timestamp"] for r in b.records]
+    assert stamps == sorted(stamps)
+    assert len(set(stamps)) == len(stamps)  # strictly increasing, no dupes
+
+
 # --- CLI contract: exit codes + receipts on stdout ----------------------------------
 
 
