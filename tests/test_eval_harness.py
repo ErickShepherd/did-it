@@ -108,6 +108,20 @@ def test_corpus_has_dev_test_split_and_held_out_operators():
     assert test_ops - dev_ops, "test split must contain operators never seen in dev"
 
 
+def test_docstrings_do_not_overstate_operator_holdout():
+    # Reality: build() applies DEV_OPERATORS + TEST_ONLY_OPERATORS to the test split,
+    # so the test-split operator set is NOT wholly "never seen in dev" — the dev
+    # operators are reused. The module docstrings must reflect that, not overstate it.
+    items = corpus.build(seed=0)
+    test_ops = {i.operator for i in items if i.split == "test" and i.operator}
+    assert set(corpus.DEV_OPERATORS) <= test_ops        # dev operators ARE seen in test
+    assert set(corpus.TEST_ONLY_OPERATORS) <= test_ops  # plus the genuinely held-out ones
+    # Neither docstring may frame ALL test-split operators as unseen in dev.
+    assert "AND mutation operators never seen in dev" not in corpus.__doc__
+    from eval import run as eval_run
+    assert "held-out phrasings + operators" not in eval_run.__doc__
+
+
 def test_corpus_labels_carry_expected_verdicts():
     items = corpus.build(seed=0)
     # Every item carries expected verdicts EXCEPT an honest-hedge session, which makes no

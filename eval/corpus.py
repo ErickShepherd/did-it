@@ -3,7 +3,8 @@
 Design: docs/design/did-it.md — D7. The published synthetic corpus is the reproducible headline:
 every item is generated (never sourced from real sessions), deterministic under its seed, and
 carries per-claim expected verdicts. Tune on the dev split; report on the held-out test split,
-which contains phrasing variants AND mutation operators never seen in dev.
+which uses phrasing variants never seen in dev and applies the dev operators plus operators
+never seen in dev (see build(): DEV_OPERATORS + TEST_ONLY_OPERATORS).
 """
 
 from __future__ import annotations

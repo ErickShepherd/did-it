@@ -8,7 +8,8 @@ Per item: adjudicate with did_it.check, match receipts to labeled fragments, the
   * fake-pass catch rate (flip_exit_code mutants caught)         bar: >= 80%
   * per-session false-accusation rate                            bar: <= 5%
   * BACKED-transcript coverage of genuinely-green pass claims    bar: >= 90%
-Headline numbers come from the TEST split (held-out phrasings + operators); dev is for tuning.
+Headline numbers come from the TEST split (held-out phrasings, plus operators never seen in
+dev on top of the dev operators); dev is for tuning.
 """
 
 from __future__ import annotations
