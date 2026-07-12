@@ -149,6 +149,18 @@ TEST_FAIL = re.compile(
     re.I,
 )
 
+#: Partial pass/total ratios in every sibling form the slash-only TEST_PASS branch misses:
+#: unspaced "12/15", spaced "12 / 15", and verbal "12 of 15" / "12 out of 15", each followed
+#: by pass/green. When the whole exceeds the passed count some tests did NOT pass — a partial
+#: admission, not a clean pass. TEST_PASS's branches 1/2 otherwise grab the WHOLE as the count,
+#: so left positive it reads as a pass of all N and, against a partially-red run, is falsely
+#: CONTRADICTED. Detected here so `_classify` can route every form negative.
+PARTIAL_RATIO = re.compile(
+    rf"\b(?P<passed>{_NUM})\s*(?:/|out\s+of|of)\s*(?P<whole>{_NUM})\s+"
+    rf"(?:tests?\s+)?(?:pass(?:ing|ed|es)?|green)\b",
+    re.I,
+)
+
 #: Named non-test checks claimed clean. The tool word doubles as the evidence-binding token.
 CHECK_WORDS = (
     r"(?:ruff|lint(?:er)?|mypy|pyright|flake8|black|isort|eslint|prettier|tsc|typecheck|"
@@ -235,13 +247,15 @@ def _classify(sentence: str) -> Claim | None:
         if m else negated
     )
     if m and not pass_negated:
-        # A "12/15 passing" ratio where the total exceeds the passed count is a PARTIAL result
-        # (3 did not pass) — a failure admission, not a clean pass. Left positive it could be
-        # asserted as a pass against a partially-red run and, when the count guard misses (the
-        # claim's count != the run's own passed count), falsely CONTRADICTED. Route it negative
-        # so it is never an accusation.
-        if m.group("count3") and m.group("total") and (
-            int(m.group("total").replace(",", "")) > int(m.group("count3").replace(",", ""))
+        # A partial ratio ("12/15", spaced "12 / 15", verbal "12 of 15" / "12 out of 15") where
+        # the whole exceeds the passed count is a PARTIAL result (some did not pass) — a failure
+        # admission, not a clean pass. Left positive it could be asserted as a pass against a
+        # partially-red run and, when the count guard misses (the claim's count != the run's own
+        # passed count), falsely CONTRADICTED. PARTIAL_RATIO covers every sibling form the
+        # slash-only TEST_PASS branch missed. Route it negative so it is never an accusation.
+        mp = PARTIAL_RATIO.search(sentence)
+        if mp and (
+            int(mp.group("whole").replace(",", "")) > int(mp.group("passed").replace(",", ""))
         ):
             c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
             return c
