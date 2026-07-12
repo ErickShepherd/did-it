@@ -8,7 +8,7 @@ Schema notes (measured on real transcripts):
     (queue-operation, ai-title, file-history-snapshot, attachment, system, ...) are skipped.
   * Message records carry a per-record `version` (Claude Code release). Core fields
     (message.content block types text / thinking / tool_use / tool_result) are stable across
-    2.1.156-2.1.205; anything outside the pinned range fails closed.
+    2.1.156-2.1.207; anything outside the pinned range fails closed.
   * Assistant tool_use blocks pair with the tool_result block (matched by tool_use_id) in a
     subsequent user record. Failed Bash runs set is_error=true and prefix content "Exit code N".
   * `isSidechain: true` records and any Task tool_use mark subagent activity (not ingested in v1).
@@ -20,13 +20,17 @@ import json
 from dataclasses import dataclass, field
 from pathlib import Path
 
-#: Inclusive range of Claude Code schema versions this build is validated against. Ten distinct
-#: versions across 2.1.156-2.1.204 were parsed with one parser; 2.1.205 verified separately.
-#: Outside this range -> UnknownSchema -> NOT-EVALUABLE (never guess).
-SUPPORTED_SCHEMA_RANGE: tuple[tuple[int, int, int], tuple[int, int, int]] = ((2, 1, 156), (2, 1, 205))
+#: Inclusive range of Claude Code schema versions this build is validated against. The range
+#: moves only under docs/design/schema-range-validation.md (the SRV2 evidence bar, mechanized
+#: by eval/schema_sweep.py) — never as an ad-hoc constant edit. 2.1.206 and 2.1.207 were added
+#: directly-validated against that bar (200+ local sessions: 0 crashes, 0 schema-caused
+#: NOT-EVALUABLE, all four core block types present, 0 CONTRADICTED; aggregates in the policy
+#: doc). Outside this range -> UnknownSchema -> NOT-EVALUABLE (never guess).
+SUPPORTED_SCHEMA_RANGE: tuple[tuple[int, int, int], tuple[int, int, int]] = ((2, 1, 156), (2, 1, 207))
 
-#: Endpoints of the validated range (scaffold-API compatibility).
-SUPPORTED_SCHEMA_VERSIONS: tuple[str, ...] = ("2.1.156", "2.1.205")
+#: Endpoints of the validated range (scaffold-API compatibility). Must render exactly the
+#: endpoints of SUPPORTED_SCHEMA_RANGE (pinned by a consistency test).
+SUPPORTED_SCHEMA_VERSIONS: tuple[str, ...] = ("2.1.156", "2.1.207")
 
 MESSAGE_TYPES = frozenset({"assistant", "user"})
 
