@@ -50,6 +50,8 @@ _FLAGS_WITH_VALUE = frozenset({
     "-k", "-m", "-run", "--tb", "--maxfail", "--durations", "--color", "-count",
     "--timeout", "-n", "--numprocesses",
 })
+_DEFAULT_RUNS = 2          # >1 so a flaky pass is caught rather than upgraded
+_DEFAULT_TIMEOUT = 300.0   # seconds; a hung re-run errors out, never blocks or upgrades
 
 
 def _escapes_repo(value: str) -> bool:
@@ -60,9 +62,6 @@ def _escapes_repo(value: str) -> bool:
     a confined argv[0]. In-repo relative paths are the repo's own code — already trusted.
     """
     return os.path.isabs(value) or value.startswith("~") or ".." in value.split("/")
-
-_DEFAULT_RUNS = 2          # >1 so a flaky pass is caught rather than upgraded
-_DEFAULT_TIMEOUT = 300.0   # seconds; a hung re-run errors out, never blocks or upgrades
 
 
 @dataclass
