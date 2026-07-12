@@ -71,7 +71,7 @@ _NON_EXECUTING = re.compile(
 )
 
 
-def _strippable(command: str) -> bool:
+def _scan_bounded(command: str) -> bool:
     """A command whose scan cost is bounded; anything else is never a witness (abstain).
 
     The count must cover EVERY anchor the runner/tool matchers key on — `$(` and backtick
@@ -93,7 +93,7 @@ def _stripped(command: str) -> str:
 #: backgrounded `--version` clause in with a real runner's clause and dropped its green run
 #: (false CONTRADICTED). `&&` precedes `&` in the alternation so a chain operator is never
 #: split into two. Splitting first means the per-clause runner scan never sees these anchors,
-#: so the `_strippable` linearity cap (which bounds `\n`) is preserved, not weakened. Shared
+#: so the `_scan_bounded` linearity cap (which bounds `\n`) is preserved, not weakened. Shared
 #: by `is_test_command` and `_runner_clause` so the two can't drift to different separator sets.
 _CLAUSE_SEP = re.compile(r"&&|\|\||;|\||\n|&")
 
@@ -106,7 +106,7 @@ def is_test_command(command: str) -> bool:
     command, so an unrelated `--version` on a different sub-command (`pytest tests/ &&
     node build.js --version`) no longer drops a real test run.
     """
-    if not _strippable(command):
+    if not _scan_bounded(command):
         return False
     return any(
         TEST_RUNNERS.search(clause) and not _NON_EXECUTING.search(clause)
@@ -503,7 +503,7 @@ def target_tokens(command: str) -> set[str]:
     neighbouring sub-commands are not test scopes. Heredoc bodies are stripped first,
     as in is_test_command — quoted file names in them are not scopes either.
     """
-    if not _strippable(command):
+    if not _scan_bounded(command):
         # Gate the quadratic HEREDOC.sub/runner regexes like every other sink in this module:
         # an un-strippable command is not evaluable as a witness, so it names no targets.
         # Without this, an ungated caller re-opens the O(n^2) heredoc ReDoS.
@@ -581,7 +581,7 @@ def _tool_position_re(word: str) -> re.Pattern[str]:
 def runs_tool(command: str, word: str) -> bool:
     """True if `command` INVOKES `word` at a command position (directly, `python -m`, or
     an npm-style runner) — `pip install pytest` and `grep ruff …` do not run the tool."""
-    if not word or not _strippable(command):
+    if not word or not _scan_bounded(command):
         return False
     return bool(_tool_position_re(word.lower()).search(_stripped(command)))
 
@@ -604,7 +604,7 @@ def _binds_path(token: str, stripped: str) -> bool:
 def binds_command(tokens: list[str], command: str) -> bool:
     """True if any claim token binds to the command: path-ish tokens (with / or .) match as a
     whole path SEGMENT of the quote-stripped command; bare tool words must be invocations."""
-    if not _strippable(command):
+    if not _scan_bounded(command):
         return False
     stripped = _stripped(command)
     for t in tokens:
