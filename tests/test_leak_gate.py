@@ -84,6 +84,27 @@ class TestMarkerEnforcedForAllFixtureFiles:
         f.write_text("ordinary file, not under fixtures/")
         assert leak_gate.scan(f) == []
 
+    def test_deny_is_global_marker_is_fixtures_scoped(self, tmp_path):
+        """Pin the module docstring's two-tier contract: DENY patterns apply to EVERY scanned
+        path (inside or outside fixtures/), while the FIXTURES_ONLY marker is required ONLY for
+        files under fixtures/. Guards against a future 'broaden the rule' that would wrongly
+        demand the marker on eval material / source outside fixtures/."""
+        # DENY is global: a private path is flagged even outside fixtures/.
+        outside_secret = tmp_path / "eval" / "snapshot.jsonl"
+        outside_secret.parent.mkdir()
+        outside_secret.write_text('{"path": "/home/alice/secret"}')
+        assert any("deny pattern" in p for p in leak_gate.scan(outside_secret))
+        # Marker is fixtures-scoped: a markerless, secret-free file OUTSIDE fixtures/ is clean...
+        outside_clean = tmp_path / "eval" / "clean.jsonl"
+        outside_clean.write_text('{"note": "ordinary eval material, no marker"}')
+        assert leak_gate.scan(outside_clean) == []
+        # ...but the SAME content UNDER fixtures/ demands the marker.
+        d = tmp_path / "fixtures"
+        d.mkdir()
+        inside = d / "clean.jsonl"
+        inside.write_text('{"note": "ordinary eval material, no marker"}')
+        assert any("marker" in p for p in leak_gate.scan(inside))
+
 
 class TestKnownRepoNamesMechanism:
     """The gitignored owner-supplied 'known repo names' denylist mechanism: the tool provides

@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Mechanical privacy leak-gate (design doc D8).
 
-Blocks committing private content in fixtures/eval material. Run by pre-commit and CI. This is
-infrastructure — the privacy gate — separate from the did-it verification pipeline.
+Blocks committing private content. Run by pre-commit and CI, both scoped to `fixtures/`
+(pre-commit `files: ^fixtures/`; CI runs with no args → the `fixtures/` default of `iter_targets`).
+This is infrastructure — the privacy gate — separate from the did-it verification pipeline.
 
-Checks each given path (default: everything under fixtures/):
-  * deny private path patterns, obvious secrets, and emails;
-  * require the `FIXTURES_ONLY` marker in committed fixture files.
+Two-tier check over each path given (default: everything under `fixtures/`):
+  * DENY private path patterns, obvious secrets, and emails — applied to EVERY scanned path;
+  * require the `FIXTURES_ONLY` marker — ONLY for files under `fixtures/`. The marker affirms
+    "fabricated fixture" (README rule: "every committed *fixture*"), so ordinary source and any
+    eval material outside `fixtures/` are DENY-scanned when passed but not marker-checked.
 
 Exit non-zero (and print offending files) on any violation.
 """
