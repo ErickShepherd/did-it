@@ -19,6 +19,20 @@ def test_private_path_is_flagged(tmp_path):
     assert leak_gate.scan(f)
 
 
+def test_json_form_secret_is_flagged(tmp_path):
+    """The JSON/JSONL form `"token": "abc"` — the exact shape every fixture uses — must trip the
+    secret regex; the closing quote after the keyword previously blocked the `\\s*[:=]` match."""
+    for line in (
+        '{"token": "abc123"}',
+        '{"api_key": "xyz"}',
+        '{"password": "hunter2"}',
+        '{"secret" : "s3cr3t"}',
+    ):
+        f = tmp_path / "leak.txt"
+        f.write_text(line)
+        assert any("deny pattern" in p for p in leak_gate.scan(f)), line
+
+
 def test_fixture_missing_marker_is_flagged(tmp_path):
     d = tmp_path / "fixtures"
     d.mkdir()

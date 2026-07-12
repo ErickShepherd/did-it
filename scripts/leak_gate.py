@@ -21,7 +21,9 @@ DENY = [
     re.compile(r"/home/[a-z]", re.I),
     re.compile(r"/Users/[A-Za-z]"),
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                 # AWS key id
-    re.compile(r"\b(secret|password|passwd|api[_-]?key|token)\s*[:=]", re.I),
+    # Allow an optional closing quote after the keyword so the JSON/JSONL form `"token": "abc"`
+    # (every fixture's shape) is caught, not just the bare `token: abc` colon form.
+    re.compile(r"\b(secret|password|passwd|api[_-]?key|token)[\"']?\s*[:=]", re.I),
     re.compile(r"[A-Za-z0-9._%+-]+@(?!example\.)[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),  # email (allow example.*)
 ]
 MARKER = "FIXTURES_ONLY"
