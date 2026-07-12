@@ -173,11 +173,12 @@ CHECK_PASS = re.compile(
     re.I,
 )
 
-#: `return(?:ed|s)?` REQUIRES a following `code`: bare "returns 0 when empty" / "returned 3
-#: results" are behavioral prose, not an exit-code claim. Run-context forms
-#: (exit/exited with/exit code, rc=, returned code N) still match.
+#: `return(?:ed|s)?` and `exit(?:ed|s)?` both REQUIRE a run-context anchor (`with`/`code`):
+#: bare "returns 0 when empty" / "returned 3 results" and bare "the loop exited 3 times" /
+#: "exits 2 handlers" are behavioral prose, not an exit-code claim. Run-context forms
+#: (exit(ed) with, exit(ed) code, rc=, returned code N) still match.
 EXIT_CODE = re.compile(
-    r"\b(?:exit(?:ed|s)?(?:\s+with)?(?:\s+code)?|rc|return(?:ed|s)?\s+code)"
+    r"\b(?:exit(?:ed|s)?\s+with(?:\s+code)?|exit(?:ed|s)?\s+code|rc|return(?:ed|s)?\s+code)"
     r"\s*[=:]?\s*(?P<code>\d+)\b",
     re.I,
 )

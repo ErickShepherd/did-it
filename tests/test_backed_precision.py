@@ -255,10 +255,17 @@ class TestExitCodeRunContextOnly:
             c = extraction._classify(s)
             assert c is None or c.kind != "exit-code", s
 
+    def test_bare_exited_count_is_not_an_exit_code_claim(self):
+        from did_it import extraction
+
+        for s in ("the loop exited 3 times", "exited 2 handlers", "the retry exits 4 times"):
+            c = extraction._classify(s)
+            assert c is None or c.kind != "exit-code", s
+
     def test_run_context_exit_codes_still_classify(self):
         from did_it import extraction
 
-        for s in ("exit code 1", "exited with 2", "rc=3", "returned code 5"):
+        for s in ("exit code 1", "exited with 2", "exited with code 4", "rc=3", "returned code 5"):
             c = extraction._classify(s)
             assert c is not None and c.kind == "exit-code", s
 
