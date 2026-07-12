@@ -8,6 +8,8 @@ into the receipt table, so ANSI/bidi controls can visually rewrite it.
 
 from __future__ import annotations
 
+import os
+import threading
 import time
 from pathlib import Path
 
@@ -74,6 +76,27 @@ class TestTranscriptSizeCap:
         monkeypatch.setattr(transcript, "_MAX_TRANSCRIPT_BYTES", 10)
         (r,) = did_it.check(p)
         assert r.verdict == Verdict.NOT_EVALUABLE
+
+    def test_fifo_transcript_is_parsefailure_not_a_hang(self, tmp_path):
+        # A FIFO reports st_size 0, so the byte cap can't catch it; read_text would BLOCK
+        # forever on a pipe with no writer — a hang escapes the fail-closed backstop. parse
+        # must reject a non-regular file up front. Run in a thread so a regressed (hanging)
+        # parse fails the test on timeout instead of wedging the suite.
+        fifo = tmp_path / "t.jsonl"
+        os.mkfifo(fifo)
+        result: dict = {}
+
+        def run():
+            try:
+                transcript.parse(fifo)
+            except BaseException as e:  # noqa: BLE001 - capture whatever parse raises
+                result["exc"] = e
+
+        t = threading.Thread(target=run, daemon=True)
+        t.start()
+        t.join(timeout=5)
+        assert not t.is_alive(), "parse() hung on a FIFO instead of failing closed"
+        assert isinstance(result.get("exc"), transcript.ParseFailure)
 
 
 class TestVersionParsingFailsClosed:

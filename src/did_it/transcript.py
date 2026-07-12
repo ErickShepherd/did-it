@@ -17,6 +17,7 @@ Schema notes (measured on real transcripts):
 from __future__ import annotations
 
 import json
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -94,7 +95,13 @@ def parse(path: str | Path) -> Session:
     to the CLI as a usage error. Never silently drops an unreadable message line.
     """
     path = Path(path)
-    size = path.stat().st_size  # OSError (missing/unreadable) propagates as a usage error
+    st = path.stat()  # OSError (missing/unreadable) propagates as a usage error
+    if not stat.S_ISREG(st.st_mode):
+        # A FIFO/char-device/socket reports st_size 0, so the byte cap below can't catch it,
+        # and read_text would then BLOCK forever on a pipe with no writer — a hang escapes the
+        # fail-closed backstop (check() cannot catch a hang). Only regular files are evaluable.
+        raise ParseFailure(f"{path.name}: not a regular file")
+    size = st.st_size
     if size > _MAX_TRANSCRIPT_BYTES:
         # Fail closed BEFORE the whole-file read, so a huge file is NOT-EVALUABLE, not a crash.
         raise ParseFailure(f"{path.name}: {size} bytes exceeds the {_MAX_TRANSCRIPT_BYTES}-byte cap")
