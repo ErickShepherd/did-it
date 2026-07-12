@@ -21,10 +21,6 @@ class Verdict(str, Enum):
     NOT_EVALUABLE = "NOT-EVALUABLE"           # parse-fail / unknown schema / evidence not ingested
 
 
-# Internal-only: prose filtered out before classification (process/workflow narration), never surfaced
-# as a verdict. See extraction.py.
-NOT_A_CLAIM = "NOT-A-CLAIM"
-
 #: Verdicts that make `did-it` exit non-zero (CI / Stop-hook signal).
 FAILING_VERDICTS = frozenset({Verdict.CONTRADICTED})
 
