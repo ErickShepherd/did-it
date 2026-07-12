@@ -49,14 +49,19 @@ def main(argv: list[str] | None = None) -> int:
         print(f"did-it: --verify re-executing validated test commands in {args.verify}", file=sys.stderr)
     try:
         receipts = did_it.check(args.transcript, verify_repo=args.verify)
+        # render/exit_code stay inside the guard: report.render handles untrusted transcript
+        # text, and a crash there must not escape to CPython's default exit 1 (reserved for
+        # CONTRADICTED). Compute both here; only the side-effect-free print runs unguarded.
+        rendered = report.render(receipts)
+        code = report.exit_code(receipts)
     except OSError as e:
         print(f"did-it: cannot read transcript: {e}", file=sys.stderr)
         return 2
     except Exception as e:  # noqa: BLE001 — exit 1 is reserved for CONTRADICTED
         print(f"did-it: internal error: {type(e).__name__}: {e}", file=sys.stderr)
         return 2
-    print(report.render(receipts), end="")
-    return report.exit_code(receipts)
+    print(rendered, end="")
+    return code
 
 
 if __name__ == "__main__":
