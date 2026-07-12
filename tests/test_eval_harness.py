@@ -6,6 +6,7 @@ test-first treatment as the pipeline.
 
 from __future__ import annotations
 
+import json
 import math
 
 import did_it
@@ -334,6 +335,36 @@ def test_anchor_scan_aggregates_need_no_ack(monkeypatch, capsys):
     assert rc == 0
     assert "REFUSED" not in cap.err
     assert "LOCAL-ONLY" not in cap.out
+
+
+# --- schema_sweep privacy gate -------------------------------------
+
+
+def test_schema_sweep_never_echoes_raw_transcript_type_labels(monkeypatch, capsys, tmp_path):
+    # Record/block `type` strings are attacker-controlled + unbounded; a crafted transcript that
+    # rides them can smuggle a secret to the sweep's publishable stdout (design D7/D8). The sweep
+    # must echo only the known, module-defined type labels and aggregate unknowns without labels.
+    from eval import schema_sweep
+
+    secret_rec = "SECRET_RECORD_TYPE_sk-live-abc123"
+    secret_block = "SECRET_BLOCK_TYPE_ghp_xyz789"
+    fp = tmp_path / "crafted.jsonl"
+    fp.write_text(
+        json.dumps(
+            {
+                "version": "2.1.207",
+                "type": secret_rec,
+                "message": {"content": [{"type": secret_block}]},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(schema_sweep.glob, "glob", lambda *a, **k: [str(fp)])
+    schema_sweep.main(["2.1.207"])
+    out = capsys.readouterr().out
+    assert secret_rec not in out
+    assert secret_block not in out
 
 
 def test_session_builder_timestamps_stay_valid_and_monotonic_past_an_hour():
