@@ -161,6 +161,20 @@ class TestExecutorAggregation:
         monkeypatch.setattr(verify.subprocess, "run", boom)
         assert verify.run_command("pytest -q", "/repo", runs=2).status == "errored"
 
+    def test_never_raises_covers_both_valueerror_sources(self, monkeypatch):
+        # Characterizes the two ValueError sources the except comment documents, both closed:
+        # (1) a NUL in argv is gated by _UNSAFE before ever reaching subprocess, so run_command
+        #     returns "skipped" (the except never fires for it), and
+        # (2) any ValueError that does reach the except (e.g. embedded null byte from an argv the
+        #     gate somehow admitted) is turned into "errored", never propagated.
+        assert not verify.is_verifiable_command("pytest\x00-q")
+        assert verify.run_command("pytest\x00-q", "/repo", runs=2).status == "skipped"
+
+        def boom(argv, **kw):
+            raise ValueError("embedded null byte")
+        monkeypatch.setattr(verify.subprocess, "run", boom)
+        assert verify.run_command("pytest -q", "/repo", runs=2).status == "errored"
+
     def test_bare_exit_zero_without_summary_is_not_green(self, monkeypatch):
         # A no-op `test` script (`npm test` -> `echo ok`) exits 0 with NO framework summary.
         # Re-execution must not endorse it as green — nothing actually ran, so no BACKED-verified

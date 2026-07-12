@@ -146,9 +146,11 @@ def run_command(command: str, cwd: str, *, runs: int = _DEFAULT_RUNS,
                 errors="replace",  # non-UTF-8 child byte must not drop a real green run
             )
         except (subprocess.TimeoutExpired, OSError, ValueError) as e:
-            # ValueError: subprocess raises "embedded null byte" for a NUL in argv. The gate
-            # now rejects NUL (_UNSAFE), so this is belt-and-suspenders for the documented
-            # "Never raises" contract — any argv the OS rejects errors, never propagates.
+            # ValueError has two sources here, both already closed upstream: subprocess raises
+            # "embedded null byte" for a NUL in argv (gated by _UNSAFE), and strict-UTF-8
+            # decoding of child output would raise UnicodeDecodeError but for the errors="replace"
+            # above. So this catch is belt-and-suspenders for the documented "Never raises"
+            # contract — anything the OS or a decoder would reject errors here, never propagates.
             return VerifyResult("errored", type(e).__name__)
         output = (cp.stdout or "") + (f"\n{cp.stderr}" if cp.stderr else "")
         run = ev.Run(index=0, command=command, exit_code=cp.returncode,
