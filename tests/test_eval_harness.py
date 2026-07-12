@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import math
 
+import pytest
+
 import did_it
 from did_it.verdicts import Verdict
 
@@ -70,6 +72,21 @@ def test_mutants_remain_internally_consistent_transcripts(tmp_path):
         p.write_text("\n".join(json.dumps(r) for r in item.records) + "\n")
         s = transcript.parse(p)  # must not raise
         assert s.records, name
+
+
+def test_operator_registries_are_consistent():
+    # The three parallel registries must agree; the real module must load clean.
+    operators._assert_registries_consistent()
+
+
+def test_operator_registry_drift_is_caught_at_the_guard(monkeypatch):
+    # Drop an operator from one registry: the fail-fast guard must catch it up front,
+    # not defer to a downstream KeyError in applicable()/apply().
+    drifted = dict(operators._MUTATORS)
+    drifted.pop("miscount")
+    monkeypatch.setattr(operators, "_MUTATORS", drifted)
+    with pytest.raises(AssertionError):
+        operators._assert_registries_consistent()
 
 
 # --- corpus: deterministic build, frozen split ---------------------------------------

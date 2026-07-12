@@ -174,3 +174,21 @@ _MUTATORS = {
     "miscount": _miscount,
     "remove_file_edit": _remove_file_edit,
 }
+
+
+def _assert_registries_consistent() -> None:
+    """Fail fast if the three operator registries drift out of sync.
+
+    OPERATORS, _APPLIES_TO, and _MUTATORS are parallel dicts keyed by operator name; an
+    operator added to one but not the others would otherwise surface only as a downstream
+    KeyError in applicable() (`_APPLIES_TO[operator]`) or apply() (`_MUTATORS[operator]`).
+    Checked at import so any mismatch is a hard load-time error, not a silent gap.
+    """
+    if not (OPERATORS.keys() == _APPLIES_TO.keys() == _MUTATORS.keys()):
+        raise AssertionError(
+            "operator registries drifted: "
+            f"OPERATORS={sorted(OPERATORS)} _APPLIES_TO={sorted(_APPLIES_TO)} _MUTATORS={sorted(_MUTATORS)}"
+        )
+
+
+_assert_registries_consistent()
