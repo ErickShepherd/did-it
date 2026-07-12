@@ -56,8 +56,9 @@ For each procedural claim the agent made, a per-claim receipt:
 | `NOT-CHECKABLE` | a semantic claim ("fixed the bug") the transcript can't adjudicate |
 | `NOT-EVALUABLE` | unparseable transcript, unknown schema version, or evidence in a subagent sidechain this version doesn't read — **unknown fails closed here, never to a verdict** |
 
-Exit code is non-zero **only** on `CONTRADICTED`, so it drops into CI or a Claude Code Stop hook
-(`did-it-hook`, advisory: it prints the receipt and never blocks the stop).
+Exit is `1` **only** on `CONTRADICTED` (abstentions and every `BACKED` verdict exit `0`; `2` is
+reserved for usage/IO errors), so a CI check keyed on exit `1` drops into a pipeline or a Claude Code
+Stop hook (`did-it-hook`, advisory: it prints the receipt and never blocks the stop).
 
 ## Design commitments
 
