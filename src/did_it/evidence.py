@@ -503,6 +503,11 @@ def target_tokens(command: str) -> set[str]:
     neighbouring sub-commands are not test scopes. Heredoc bodies are stripped first,
     as in is_test_command — quoted file names in them are not scopes either.
     """
+    if not _strippable(command):
+        # Gate the quadratic HEREDOC.sub/runner regexes like every other sink in this module:
+        # an un-strippable command is not evaluable as a witness, so it names no targets.
+        # Without this, an ungated caller re-opens the O(n^2) heredoc ReDoS.
+        return set()
     clause = _runner_clause(HEREDOC.sub(" ", command))
     m = TEST_RUNNERS.search(clause)
     args = clause[m.end():] if m else clause

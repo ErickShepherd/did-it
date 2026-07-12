@@ -29,6 +29,19 @@ class TestTargetTokens:
         assert target_tokens("pytest -kfoo") == {"foo"}
         assert target_tokens("pytest -q") == set()
 
+    def test_heredoc_flood_abstains_quickly_when_called_directly(self):
+        # target_tokens strips heredoc bodies via the quadratic HEREDOC regex; every OTHER
+        # regex sink gates on _strippable first, but this one did not — an ungated caller
+        # (present or future) re-opens the O(n^2) heredoc ReDoS. An un-strippable command is
+        # not evaluable as a witness, so it names no targets: abstain with the empty set.
+        import time
+
+        flooded = "pytest " + "<<X " * 40_000
+        assert not evidence._strippable(flooded)  # precondition: this is the un-strippable shape
+        t0 = time.monotonic()
+        assert target_tokens(flooded) == set()
+        assert time.monotonic() - t0 < 2.0
+
 
 class TestIsTestCommand:
     def test_plain_pytest(self):
