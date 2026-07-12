@@ -299,6 +299,39 @@ class TestPartialPassRatio:
         assert verdict_of(receipts, "12/15") != Verdict.CONTRADICTED
 
 
+class TestNegatedProceduralClaims:
+    """`file-created`/`command-ran` had no negation gate, so a denial ("never created
+    config.py", "never ran the suite") was misread as a POSITIVE claim and could then be
+    falsely BACKED — endorsing a claim the author explicitly denied making. A leading
+    negation within the verb's own clause must drop the positive claim (safe direction)."""
+
+    def test_negated_file_created_is_not_a_positive_claim(self):
+        from did_it import extraction
+
+        for s in ("never created config.py", "no longer wrote config.py",
+                  "I hasn't added helper.py"):
+            c = extraction._classify(s)
+            assert c is None or c.kind != "file-created" or c.polarity != "positive", s
+
+    def test_negated_command_ran_is_not_a_positive_claim(self):
+        from did_it import extraction
+
+        for s in ("never ran the suite", "no longer ran the tests",
+                  "never executed the migration"):
+            c = extraction._classify(s)
+            assert c is None or c.kind != "command-ran" or c.polarity != "positive", s
+
+    def test_genuine_procedural_claims_still_classify_positive(self):
+        from did_it import extraction
+
+        for s, kind in (("created config.py", "file-created"),
+                        ("ran the suite", "command-ran"),
+                        # a bare "no"/"not" elsewhere in the sentence must NOT drop it
+                        ("I ran the tests, no problem here", "command-ran")):
+            c = extraction._classify(s)
+            assert c is not None and (c.kind, c.polarity) == (kind, "positive"), s
+
+
 class TestNarrationCoOccurrence:
     def test_checkable_claim_inside_workflow_narration_is_adjudicated(self, tmp_path):
         # 'worktree' vocabulary silently dropped a co-occurring pass-claim.

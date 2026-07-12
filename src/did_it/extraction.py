@@ -199,6 +199,17 @@ COMMAND_RAN = re.compile(
     re.I,
 )
 
+#: Leading negations that invert an apparent file-created/command-ran claim into a DENIAL
+#: ("never created config.py", "never ran the suite"). FILE_CREATED/COMMAND_RAN match only
+#: past-tense verbs, so the reachable negators are the clausal ones ("never", "no longer",
+#: an aux + n't); bare "no"/"not" are excluded so an unrelated "…, no problem" can't drop a
+#: genuine claim. Left ungated, a denial reads as POSITIVE and can be falsely BACKED.
+PROC_NEG = re.compile(
+    r"\b(?:never|no longer|didn't|did not|doesn't|does not|hasn't|has not|"
+    r"haven't|have not|wasn't|was not|weren't|were not|couldn't|could not|failed to)\b",
+    re.I,
+)
+
 #: Assertive past-tense procedural verbs with no checkable pattern -> semantic (NOT-CHECKABLE).
 SEMANTIC_VERBS = re.compile(
     r"\b(?:fix(?:ed)?|refactor(?:ed)?|implement(?:ed)?|resolv(?:e|ed)|improv(?:e|ed)|"
@@ -225,6 +236,19 @@ def _pass_clause_to_end(sentence: str, pos: int) -> str:
     like "all tests pass, no new failures, though X still fails" are unchanged).
     """
     return sentence[sentence.rfind(";", 0, pos) + 1:]
+
+
+def _proc_negated(sentence: str, verb_start: int) -> bool:
+    """True if a leading negation ("never ran", "no longer created") within the verb's own
+    `;`-clause and just before it inverts a file-created/command-ran claim into a denial.
+
+    Scoped to the clause (after the last `;`) and the few tokens preceding the verb so a
+    negation in an EARLIER clause ("never touched X; wrote config.py") can't wrongly drop a
+    genuine claim. Dropping a negated claim is the safe direction — it never fabricates one.
+    """
+    clause = sentence[sentence.rfind(";", 0, verb_start) + 1:verb_start]
+    window = " ".join(clause.split()[-4:])
+    return bool(PROC_NEG.search(window))
 
 
 def _classify(sentence: str) -> Claim | None:
@@ -290,12 +314,13 @@ def _classify(sentence: str) -> Claim | None:
         return c
 
     m = FILE_CREATED.search(sentence)
-    if m:
+    if m and not _proc_negated(sentence, m.start()):
         c.kind, c.is_procedural = "file-created", True
         c.tokens.insert(0, m.group("path"))
         return c
 
-    if COMMAND_RAN.search(sentence):
+    mc = COMMAND_RAN.search(sentence)
+    if mc and not _proc_negated(sentence, mc.start()):
         c.kind, c.is_procedural = "command-ran", True
         return c
 
