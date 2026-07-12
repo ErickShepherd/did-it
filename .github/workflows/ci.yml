@@ -1,6 +1,7 @@
 name: ci
 on:
   push:
+    branches: ['**']  # every branch, but NOT tag pushes (a tag re-runs CI on an old release commit)
   pull_request:
 
 jobs:
