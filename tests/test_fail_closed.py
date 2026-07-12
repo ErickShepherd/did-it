@@ -609,6 +609,33 @@ class TestSidechainFlagIsStrictBoolean:
         assert session.records == []  # skipped
 
 
+class TestAbsentNoteContract:
+    """reconcile._absent supersedes the caller's UNSUPPORTED-context note on the subagent branch
+    with the fixed NOT_EVALUABLE sidechain string (an off-bar signal in eval/schema_sweep.py); on
+    the no-subagent branch the caller's note is carried through verbatim. Pins the intentional
+    discard so a future 'use the passed note' change can't silently break the eval signal."""
+
+    class _Claim:
+        text = "tests pass"
+        utterance_index = 0
+
+    class _Session:
+        def __init__(self, used):
+            self.used_subagents = used
+
+    def test_subagent_branch_uses_fixed_sidechain_note_not_the_caller_note(self):
+        from did_it import reconcile
+        r = reconcile._absent(self._Claim(), self._Session(True), "no valid test run at utterance-time")
+        assert r.verdict == Verdict.NOT_EVALUABLE
+        assert r.notes == ["evidence may be in an un-ingested sidechain (v1.1)"]
+
+    def test_no_subagent_branch_carries_the_caller_note_through(self):
+        from did_it import reconcile
+        r = reconcile._absent(self._Claim(), self._Session(False), "no valid test run at utterance-time")
+        assert r.verdict == Verdict.UNSUPPORTED
+        assert r.notes == ["no valid test run at utterance-time"]
+
+
 class TestBlockFilterSingleSource:
     """content_blocks delegates the block filter to _blocks so the trust-sensitive logic lives in
     one place. Malformed content still yields [] (fail closed)."""

@@ -31,6 +31,10 @@ def _receipt(claim, verdict: Verdict, e: ev.Evidence | None = None, note: str | 
 def _absent(claim, session, note: str) -> Receipt:  # noqa: ANN001
     """No evidence found: NOT_EVALUABLE if it may sit in an un-ingested sidechain, else UNSUPPORTED."""
     if session.used_subagents:
+        # `note` (the caller's UNSUPPORTED-context reason, e.g. "no valid test run") is deliberately
+        # superseded here: with subagents in play, absence means "may live in an un-ingested
+        # sidechain", not "unsupported". This exact string is an off-bar signal in eval/schema_sweep.py
+        # (per-claim NOT-EVALUABLE), so keep it fixed rather than threading the caller's note through.
         return _receipt(claim, Verdict.NOT_EVALUABLE, note="evidence may be in an un-ingested sidechain (v1.1)")
     return _receipt(claim, Verdict.UNSUPPORTED, note=note)
 
