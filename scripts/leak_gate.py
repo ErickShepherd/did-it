@@ -20,7 +20,13 @@ from pathlib import Path
 DENY = [
     re.compile(r"/home/[a-z]", re.I),
     re.compile(r"/Users/[A-Za-z]"),
-    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                 # AWS key id
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                 # AWS access key id
+    re.compile(r"\bASIA[0-9A-Z]{16}\b"),                 # AWS temporary (STS) key id
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),   # PEM private key block
+    re.compile(r"\bghp_[0-9A-Za-z]{36}\b"),              # GitHub personal access token
+    re.compile(r"\bgithub_pat_[0-9A-Za-z_]{22,}\b"),     # GitHub fine-grained PAT
+    re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}\b"),     # Slack token
+    re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"),           # Google API key
     # Allow an optional closing quote after the keyword so the JSON/JSONL form `"token": "abc"`
     # (every fixture's shape) is caught, not just the bare `token: abc` colon form.
     re.compile(r"\b(secret|password|passwd|api[_-]?key|token)[\"']?\s*[:=]", re.I),

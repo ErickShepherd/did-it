@@ -33,6 +33,25 @@ def test_json_form_secret_is_flagged(tmp_path):
         assert any("deny pattern" in p for p in leak_gate.scan(f)), line
 
 
+def test_high_entropy_token_shapes_are_flagged(tmp_path):
+    """Beyond AKIA + keyword-colon, the gate must catch the common concrete secret shapes:
+    PEM private keys, GitHub tokens, Slack tokens, Google API keys, and AWS-temp keys. Each is a
+    near-zero-FP fixed prefix, so a match is a real leak."""
+    for secret in (
+        "-----BEGIN RSA PRIVATE KEY-----",
+        "-----BEGIN PRIVATE KEY-----",
+        "ghp_" + "a" * 36,
+        "github_pat_" + "A1b2C3d4E5" * 5,
+        "xoxb-1234567890-abcdefABCDEF",
+        "xoxp-0987654321-ZYXwvu",
+        "AIza" + "aB3-_dEf" * 4 + "aBc",  # AIza + 35 chars
+        "ASIA" + "1234567890ABCDEF",
+    ):
+        f = tmp_path / "leak.txt"
+        f.write_text(secret)
+        assert any("deny pattern" in p for p in leak_gate.scan(f)), secret
+
+
 def test_fixture_missing_marker_is_flagged(tmp_path):
     d = tmp_path / "fixtures"
     d.mkdir()
