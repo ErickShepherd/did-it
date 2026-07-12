@@ -22,6 +22,23 @@ FIXTURE_CWD = "/work/toy-repo"  # fabricated; leak-gate denies real home paths
 _TS_EPOCH = datetime(2026, 1, 1, tzinfo=timezone.utc)
 
 
+def write_jsonl(records: list[dict], path: Path, *, marker: bool = True) -> Path:
+    """Serialize records to .jsonl. The marker record satisfies the leak gate for committed fixtures.
+
+    ensure_ascii=False matches the real writer (Node's JSON.stringify emits raw UTF-8
+    and does NOT escape U+2028/U+2029/NEL) — fixtures must exercise the same bytes.
+
+    Shared by SessionBuilder.write_jsonl and eval.corpus.CorpusItem.write so their byte
+    output can never drift.
+    """
+    lines = []
+    if marker:
+        lines.append(json.dumps({"type": "fixture-marker", "marker": "FIXTURES_ONLY"}))
+    lines += [json.dumps(r, ensure_ascii=False) for r in records]
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
+
+
 class SessionBuilder:
     """Build an internally consistent fabricated transcript, record by record."""
 
@@ -156,14 +173,5 @@ class SessionBuilder:
     # -- output -----------------------------------------------------------------
 
     def write_jsonl(self, path: Path, *, marker: bool = True) -> Path:
-        """Serialize to .jsonl. The marker record satisfies the leak gate for committed fixtures.
-
-        ensure_ascii=False matches the real writer (Node's JSON.stringify emits raw UTF-8
-        and does NOT escape U+2028/U+2029/NEL) — fixtures must exercise the same bytes.
-        """
-        lines = []
-        if marker:
-            lines.append(json.dumps({"type": "fixture-marker", "marker": "FIXTURES_ONLY"}))
-        lines += [json.dumps(r, ensure_ascii=False) for r in self.records]
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return path
+        """Serialize this session to .jsonl via the shared module-level writer."""
+        return write_jsonl(self.records, path, marker=marker)
