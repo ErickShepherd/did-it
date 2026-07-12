@@ -337,6 +337,45 @@ def test_anchor_scan_aggregates_need_no_ack(monkeypatch, capsys):
     assert "LOCAL-ONLY" not in cap.out
 
 
+def test_anchor_scan_toctou_delete_never_leaks_the_private_transcript_path(
+    monkeypatch, capsys, tmp_path
+):
+    # A transcript can vanish between glob@59 and check@78 (TOCTOU delete). check() re-raises the
+    # resulting OSError, whose str() carries the full private ~/.claude/projects/<repo>/… path.
+    # anchor_scan's parse-try catches only UnknownSchema/ParseFailure, so an unwrapped check() lets
+    # that OSError propagate out of main() as a traceback, leaking the path to stderr. It must
+    # instead catch OSError and record only the exception type — never the raw message (SYS-3, D7/D8).
+    import errno as errno_mod
+
+    from eval import anchor_scan
+
+    secret_dir = "-home-user-SECRETLEAK"
+    secret_path = f"/home/user/.claude/projects/{secret_dir}/session.jsonl"
+    fp = tmp_path / "crafted.jsonl"
+    fp.write_text(
+        json.dumps(
+            {
+                "version": "2.1.207",
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "hello"}]},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(anchor_scan.glob, "glob", lambda *a, **k: [str(fp)])
+
+    def _boom(_p):
+        raise FileNotFoundError(errno_mod.ENOENT, "No such file or directory", secret_path)
+
+    monkeypatch.setattr(anchor_scan.did_it, "check", _boom)
+    rc = anchor_scan.main(["1"])
+    cap = capsys.readouterr()
+    assert rc == 0
+    assert secret_path not in cap.out and secret_path not in cap.err
+    assert secret_dir not in cap.out and secret_dir not in cap.err
+
+
 # --- schema_sweep privacy gate -------------------------------------
 
 

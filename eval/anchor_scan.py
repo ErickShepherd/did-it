@@ -74,8 +74,20 @@ def main(argv: list[str]) -> int:
         except (transcript.UnknownSchema, transcript.ParseFailure):
             verdicts["(session NOT-EVALUABLE)"] += 1
             continue
+        except OSError as e:
+            # TOCTOU: the file vanished/became unreadable between glob@59 and now. Its OSError
+            # str() carries the full private ~/.claude/projects/<repo>/… path — record ONLY the
+            # exception type so no private path can reach stderr as a traceback (SYS-3, D7/D8).
+            verdicts[f"(session I/O error: {type(e).__name__})"] += 1
+            continue
         parsed += 1
-        receipts = did_it.check(fp)
+        try:
+            receipts = did_it.check(fp)
+        except OSError as e:
+            # check() re-parses and re-raises OSError on a mid-scan delete — same private-path
+            # leak as above; catch it here too, recording only the type.
+            verdicts[f"(session I/O error: {type(e).__name__})"] += 1
+            continue
         claims = extraction.extract_claims(session)
         for c in claims:
             kinds[c.kind or "?"] += 1
