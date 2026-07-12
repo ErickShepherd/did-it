@@ -51,8 +51,11 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
 - **D1 — A focused reconciler, not a leaderboard or comparison service.** `did-it` verifies one agent's claims
   against its own session; a hosted, live vendor-ranking leaderboard is explicitly out of scope (a possible
   deferred, self-run reporting mode is v2+, never a live curated ranking).
-- **D2 — Narrow-flawless scope: Claude Code, one pinned schema, procedural claims only.** Scope-discipline *is* the
-  point; a reconciler that mis-reconciles self-refutes. Semantic claims → `NOT-CHECKABLE` by design.
+- **D2 — Narrow-flawless scope: Claude Code, a pinned validated schema range, procedural claims only.** Scope-discipline
+  *is* the point; a reconciler that mis-reconciles self-refutes. Semantic claims → `NOT-CHECKABLE` by design.
+  The pinned range is not frozen: it extends as new CLI versions are validated, but only under the evidence bar and
+  runbook of `docs/design/schema-range-validation.md` (end-to-end sweep over real sessions, volume floor,
+  zero-accusation check; constants-only bumps, human-reviewed). Outside the range still fails closed.
 - **D3 — Two-tier BACKED (spike-driven, decisive).** The prior spec forbade transcript-BACKED and deferred `--verify`,
   making v1 vacuous (spike: ~5% informative-verdict rate). Letting an in-transcript green `tool_result` earn
   `BACKED-transcript` lifts the informative rate to a projected ~25–35% and covers the hero "tests pass" claim **with no
@@ -124,7 +127,9 @@ utterance-time index) + session summary. **Non-zero exit only on `CONTRADICTED`*
 - **Per-session vs per-claim false-accusation.** Mitigated by D4 (narrow CONTRADICTED trigger → small per-session
   exposure), but must be *measured* per-session, not just per-claim.
 - **Schema drift → mass false verdicts.** *Mitigation:* version-pin + fingerprint + multi-version CI fixtures + fail-closed
-  to `NOT-EVALUABLE`. Spike: core fields stable across 10 versions (2.1.156–2.1.204), so residual risk is intra-major, manageable.
+  to `NOT-EVALUABLE`. Spike: core fields stable across 10 versions (2.1.156–2.1.204), so residual risk is intra-major,
+  manageable; re-confirmed end-to-end at 2.1.206–2.1.207 (0 crashes / 0 accusations over 206 real sessions). Range bumps
+  follow the standing validation policy (`docs/design/schema-range-validation.md`).
 - **Scope-erosion read ("elaborate eval harness over a log-grep").** *Mitigation:* lead the pitch with the
   transcript-only fake-green `CONTRADICTED` verdict (the money demo) + the eval rigor (held-out operators, cluster-bootstrap,
   utterance-time logic); be honest that v1 adjudicates procedural claims.
