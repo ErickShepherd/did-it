@@ -225,6 +225,23 @@ def test_f05_is_zero_not_none_on_total_detection_failure():
     assert eval_run._f05(silent) is None
 
 
+def test_label_match_rate_is_none_not_fabricated_zero_on_zero_labels():
+    # No labels present in the rowset → no signal → the rate must be None, NOT a fabricated 0.0
+    # (the None-not-fabricated contract; matches _precision/_recall's "None when no signal").
+    from eval import run as eval_run
+
+    no_labels = [{"session": "s", "operator": None, "template": "green-run", "labels": 0,
+                  "matched": 0, "expected_contradicted": 0, "true_contradicted": 0,
+                  "false_contradicted": 0, "got": {}}]
+    assert eval_run.report(no_labels)["label_match_rate"] is None
+
+    # Labels present but none matched → a real 0.0 (signal exists, tool scored 0), not None.
+    missed = [{"session": "s", "operator": None, "template": "green-run", "labels": 2,
+               "matched": 0, "expected_contradicted": 0, "true_contradicted": 0,
+               "false_contradicted": 0, "got": {}}]
+    assert eval_run.report(missed)["label_match_rate"] == 0.0
+
+
 def _row(session, *, operator=None, template="green-run", expected=0, true=0, false=0, backed=False):
     return {"session": session, "operator": operator, "template": template, "labels": 1,
             "matched": 1, "expected_contradicted": expected, "true_contradicted": true,

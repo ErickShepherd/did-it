@@ -80,6 +80,13 @@ def _recall(rs: list[dict]) -> float | None:
     return tp / (tp + fn) if tp + fn else None
 
 
+def _label_match_rate(rs: list[dict]) -> float | None:
+    labels = sum(r["labels"] for r in rs)
+    # None when NO labels exist (no signal) — never a fabricated 0.0; real 0.0 when labels
+    # exist but none matched (the None-not-fabricated contract, matching _precision/_recall).
+    return sum(r["matched"] for r in rs) / labels if labels else None
+
+
 def _f05(rs: list[dict]) -> float | None:
     # None ONLY when NEITHER side is defined (no accusations AND no expected contradictions —
     # truly no signal). When one side is None the other is necessarily defined-and-0 (a total
@@ -123,7 +130,7 @@ def report(rows: list[dict]) -> dict:
     # are unchanged, the CI is added alongside as ci95.
     return {
         "sessions": len(rows),
-        "label_match_rate": sum(r["matched"] for r in rows) / max(sum(r["labels"] for r in rows), 1),
+        "label_match_rate": _label_match_rate(rows),
         "contradicted": {
             "precision": _precision(rows), "precision_ci95": _ci(rows, _precision),
             "recall": _recall(rows), "recall_ci95": _ci(rows, _recall),
