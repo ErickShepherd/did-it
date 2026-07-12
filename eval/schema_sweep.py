@@ -62,6 +62,19 @@ _SESSION_LEVEL_CLAIM = "(entire session)"  # mirrors did_it/__init__.py's _not_e
 _SCHEMA_CAUSES = frozenset({"UnknownSchema", "ParseFailure"})
 
 
+def _crash_summary(e: Exception) -> str:
+    """Path-free one-line label for a library-boundary crash. check() re-raises OSError
+    (missing/unreadable file) whose str() carries the full private ~/.claude/projects/<repo>/…
+    path — so record only the type and, for OSError, its errno + the basename, never the raw
+    message (design D7/D8, SYS-3). The basename is the session file (a UUID), not the private
+    repo path.
+    """
+    if isinstance(e, OSError):
+        base = os.path.basename(e.filename) if e.filename else "?"
+        return f"{type(e).__name__}(errno={e.errno}, file={base})"
+    return type(e).__name__
+
+
 def _msg_count(rec_types: Counter[str]) -> int:
     """Records that ARE message records (assistant/user) — the SRV2.2 volume-floor population.
     Ambient versioned records (attachment/system) carry a `version` but are not what the pipeline
@@ -176,7 +189,7 @@ def main(argv: list[str]) -> int:
         try:
             receipts = did_it.check(fp)
         except Exception as e:  # noqa: BLE001 — a raise at the library boundary IS the finding
-            crashes.append(f"{type(e).__name__}: {e}"[:120])
+            crashes.append(_crash_summary(e))
             continue
         ok += 1
         if receipts:

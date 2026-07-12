@@ -367,6 +367,37 @@ def test_schema_sweep_never_echoes_raw_transcript_type_labels(monkeypatch, capsy
     assert secret_block not in out
 
 
+def test_schema_sweep_crash_never_leaks_the_private_transcript_path(
+    monkeypatch, capsys, tmp_path
+):
+    # check() re-raises OSError (missing/unreadable file) whose str() carries the full private
+    # ~/.claude/projects/<repo>/… path. The library-boundary crash handler must record only a
+    # path-free summary (type + errno + basename) — never the raw message — so the sweep's
+    # publishable stdout can't leak the private path (design D7/D8, SYS-3).
+    import errno as errno_mod
+
+    from eval import schema_sweep
+
+    secret_dir = "-home-user-SECRETLEAK"  # short: survives the 120-char crash cap, as real repos do
+    secret_path = f"/home/user/.claude/projects/{secret_dir}/session.jsonl"
+    fp = tmp_path / "crafted.jsonl"
+    fp.write_text(
+        json.dumps({"version": "2.1.207", "type": "assistant"}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(schema_sweep.glob, "glob", lambda *a, **k: [str(fp)])
+
+    def _boom(_p):
+        raise FileNotFoundError(errno_mod.ENOENT, "No such file or directory", secret_path)
+
+    monkeypatch.setattr(schema_sweep.did_it, "check", _boom)
+    schema_sweep.main(["2.1.207"])
+    out = capsys.readouterr().out
+    assert secret_path not in out
+    assert secret_dir not in out
+    assert "library-boundary crashes: 1" in out
+
+
 def test_session_builder_timestamps_stay_valid_and_monotonic_past_an_hour():
     # counter//60 hit 60 at 3600 records -> "00:60:00", an invalid ISO timestamp.
     from datetime import datetime
