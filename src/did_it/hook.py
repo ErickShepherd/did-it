@@ -28,12 +28,16 @@ def run_stop_hook(payload: dict) -> int:
 
     try:
         receipts = did_it.check(path)
+        # render stays inside the guard: report.render handles untrusted transcript text,
+        # and a crash there must never escape — the advisory hook ALWAYS returns 0. Only the
+        # side-effect-free prints run unguarded.
+        rendered = report.render(receipts)
     except OSError:
         return 0  # a vanished transcript is not the agent's fault
     except Exception:  # noqa: BLE001 — advisory: a crash must never block the stop
         return 0
     print("did-it (advisory session receipt):")
-    print(report.render(receipts), end="")
+    print(rendered, end="")
     return 0
 
 

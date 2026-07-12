@@ -245,6 +245,14 @@ class TestInternalErrorBackstop:
         monkeypatch.setattr(report, "render", lambda *_a, **_k: 1 / 0)
         assert cli.main([str(p)]) == 2
 
+    def test_hook_render_crash_stays_advisory_returns_zero(self, tmp_path, capsys, monkeypatch):
+        # Sibling of the CLI case: report.render handles untrusted transcript text; a crash
+        # there must not escape run_stop_hook — the Stop hook ALWAYS returns 0, never blocks.
+        p = tmp_path / "t.jsonl"
+        p.write_text("{}\n")
+        monkeypatch.setattr(report, "render", lambda *_a, **_k: 1 / 0)
+        assert hook.run_stop_hook({"transcript_path": str(p)}) == 0
+
 
 # --- malformed block internals must not crash build_index --------------------------
 
