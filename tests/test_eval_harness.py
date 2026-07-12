@@ -203,6 +203,28 @@ def test_report_undefined_metrics_are_none_not_perfect():
     assert out["backed_coverage_green_runs"]["ci95"] is None
 
 
+def test_f05_is_zero_not_none_on_total_detection_failure():
+    # Total detection failure: expected contradictions exist but the tool made NO accusation
+    # (tp=0, fp=0 → precision undefined; fn>0 → recall defined-and-0). The headline F0.5 must
+    # show 0.0 (the tool failed worst), not go blank — None is reserved for NEITHER side defined.
+    from eval import run as eval_run
+
+    fail = [{"session": "s", "operator": None, "template": "hedged", "labels": 1,
+             "matched": 0, "expected_contradicted": 1, "true_contradicted": 0,
+             "false_contradicted": 0, "got": {}}]
+    assert eval_run._precision(fail) is None      # no accusations → precision undefined
+    assert eval_run._recall(fail) == 0.0          # a contradiction went uncaught → recall 0
+    assert eval_run._f05(fail) == 0.0             # so F0.5 is 0.0, not blank
+
+    # No signal at all (no accusations AND no expected contradictions): both sides undefined → None.
+    silent = [{"session": "s", "operator": None, "template": "hedged", "labels": 0,
+               "matched": 0, "expected_contradicted": 0, "true_contradicted": 0,
+               "false_contradicted": 0, "got": {}}]
+    assert eval_run._precision(silent) is None
+    assert eval_run._recall(silent) is None
+    assert eval_run._f05(silent) is None
+
+
 def _row(session, *, operator=None, template="green-run", expected=0, true=0, false=0, backed=False):
     return {"session": session, "operator": operator, "template": template, "labels": 1,
             "matched": 1, "expected_contradicted": expected, "true_contradicted": true,

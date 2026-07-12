@@ -81,8 +81,14 @@ def _recall(rs: list[dict]) -> float | None:
 
 
 def _f05(rs: list[dict]) -> float | None:
+    # None ONLY when NEITHER side is defined (no accusations AND no expected contradictions —
+    # truly no signal). When one side is None the other is necessarily defined-and-0 (a total
+    # detection failure: e.g. no accusations → precision None, uncaught contradiction → recall 0),
+    # so F0.5 must read 0.0, not blank — the alarm must fire when the tool fails worst.
     p, r = _precision(rs), _recall(rs)
-    return metrics.f_beta(p, r, 0.5) if p is not None and r is not None else None
+    if p is None and r is None:
+        return None
+    return metrics.f_beta(p or 0.0, r or 0.0, 0.5)
 
 
 def _fake_pass_rate(rs: list[dict]) -> float | None:
