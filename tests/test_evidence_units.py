@@ -7,8 +7,9 @@ transcripts: heredoc/pip phantom test runs, doc-only-edit guard voiding).
 from __future__ import annotations
 
 import did_it
+from did_it import evidence
 from did_it.verdicts import Verdict
-from did_it.evidence import is_test_command, target_tokens
+from did_it.evidence import Run, classify_outcome, is_test_command, target_tokens
 
 from did_it.testing import SessionBuilder
 
@@ -270,3 +271,38 @@ class TestNegativeGreenEvidenceLinkage:
         (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert r.verdict == Verdict.UNSUPPORTED
         assert r.evidence_ref is not None and r.evidence_tier == "witness"
+
+
+class TestSummaryLinesCaching:
+    """`_summary_lines` (splitlines + per-line regex over uncapped tool output) is recomputed
+    several times inside a single `classify_outcome` (framework_failed/green/contradiction_span
+    each re-scan). Caching it to the instance must not change any verdict — it only stops the
+    redundant re-scans. Pinned by counting `_is_summary_line` invocations: with the scan cached,
+    it runs exactly once per output line across a whole `classify_outcome`; recomputed, several
+    times that."""
+
+    def test_summary_scan_runs_once_per_line_across_classify_outcome(self, monkeypatch):
+        run = Run(index=0, command="pytest", exit_code=1,
+                  output="1 failed in 0.50s\n", ref="x", is_test_run=True)
+        calls = {"n": 0}
+        real = evidence._is_summary_line
+
+        def counting(line):
+            calls["n"] += 1
+            return real(line)
+
+        monkeypatch.setattr(evidence, "_is_summary_line", counting)
+        classify_outcome(run)
+        assert calls["n"] == len(run.output.splitlines())
+
+    def test_caching_preserves_outcomes(self):
+        # A red, a green, and a conflicting-summary run classify exactly as before.
+        red = Run(index=0, command="pytest", exit_code=1,
+                  output="1 failed in 0.50s\n", ref="a", is_test_run=True)
+        green = Run(index=0, command="pytest", exit_code=0,
+                    output="12 passed in 0.30s\n", ref="b", is_test_run=True)
+        conflict = Run(index=0, command="pytest", exit_code=0,
+                       output="12 passed in 0.30s\n2 failed in 0.10s\n", ref="c", is_test_run=True)
+        assert classify_outcome(red)[0] == "red"
+        assert classify_outcome(green)[0] == "green"
+        assert classify_outcome(conflict)[0] == "ambiguous"

@@ -171,7 +171,13 @@ class Run:
     ref: str                       # tool_use id
     is_test_run: bool
 
+    @functools.cached_property
     def _summary_lines(self) -> list[str]:
+        # Cached per instance (the dataclass is unfrozen, so cached_property may write to
+        # __dict__): classify_outcome reads this several times (framework_failed/green/
+        # contradiction_span each re-scan), and the scan is splitlines + per-line regex over
+        # uncapped tool output. A Run's `output` never mutates after construction, so the cache
+        # can't go stale.
         return [line for line in self.output.splitlines() if _is_summary_line(line)]
 
     @staticmethod
@@ -197,7 +203,7 @@ class Run:
         cat'd CI log's stale FAILED line beside a green summary produced a false
         accusation. Conflicting summaries (a green summary line AND a
         separate failure-summary line) are ambiguous, never a failure marker."""
-        lines = self._summary_lines()
+        lines = self._summary_lines
         if lines:
             if self._summaries_conflict(lines):
                 return False
@@ -207,7 +213,7 @@ class Run:
     @property
     def framework_green(self) -> bool:
         """The test framework's own summary reported passes and no failures."""
-        lines = self._summary_lines()
+        lines = self._summary_lines
         if self._summaries_conflict(lines):
             return False  # conflicting summaries → ambiguous, not backed
         return any(_PASSED_COUNT.search(line) for line in lines) and not self.framework_failed
@@ -222,7 +228,7 @@ class Run:
         fail_span = next(
             (
                 m.group(0).strip()
-                for line in self._summary_lines()
+                for line in self._summary_lines
                 for m in [_FAILED_COUNT.search(line)]
                 if m
             ),
@@ -370,7 +376,7 @@ def classify_outcome(run: Run) -> tuple[str, str | None]:
     masked exit (`pytest || true`) beside a visible red summary endorsed a fake pass-claim.
     Never an accusation either way — D4 requires a non-zero exit.
     """
-    if run._summaries_conflict(run._summary_lines()):
+    if run._summaries_conflict(run._summary_lines):
         # Conflicting framework summaries (a green-only AND a separate failure-only line) are
         # untrustworthy in EITHER exit direction: framework_failed abstains to False on a
         # conflict, so without this a masked exit (`... || true`) would fall through to the
@@ -467,7 +473,7 @@ _GENERIC_TOKENS = frozenset({"test", "tests", "and", "or", "not"})
 
 def summary_passed_count(run: Run) -> int | None:
     """Passed-count read off the framework's own summary line only (never echoed output)."""
-    for line in run._summary_lines():
+    for line in run._summary_lines:
         m = _PASSED_N.search(line)
         if m:
             return int(m.group(1).replace(",", ""))
