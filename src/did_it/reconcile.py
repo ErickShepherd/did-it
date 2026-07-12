@@ -76,11 +76,15 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
     return _receipt(claim, Verdict.UNSUPPORTED, e, note=e.note)
 
 
-def _run_for(index: ev.Index, e: ev.Evidence) -> ev.Run | None:
+def _run_by_ref(index: ev.Index, ref: str | None) -> ev.Run | None:
     for run in index.runs:
-        if run.ref == e.ref:
+        if run.ref == ref:
             return run
     return None
+
+
+def _run_for(index: ev.Index, e: ev.Evidence) -> ev.Run | None:
+    return _run_by_ref(index, e.ref)
 
 
 def _named_check(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
@@ -187,7 +191,7 @@ def _apply_verification(pairs, index: ev.Index, repo: str) -> None:  # noqa: ANN
             or claim.polarity != "positive"
         ):
             continue
-        run = next((r for r in index.runs if r.ref == receipt.evidence_ref), None)
+        run = _run_by_ref(index, receipt.evidence_ref)
         if run is None:
             continue
         if not verify.is_verifiable_command(run.command):

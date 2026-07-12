@@ -296,6 +296,31 @@ class TestExitCodeNoneCountDoesNotFalselyBack:
         assert receipt.verdict != Verdict.BACKED_TRANSCRIPT
 
 
+class TestRunByRefSharedLookup:
+    """The ref->Run lookup at the --verify site (`_verify_pairs`) and the evidence-driven
+    lookup (`_run_for`) must share ONE implementation (`_run_by_ref`), not two inline copies
+    that can drift. Pins: `_run_by_ref` exists, finds a run by ref / returns None on a miss,
+    and `_run_for` agrees with it for the same ref."""
+
+    def test_run_by_ref_finds_matches_and_agrees_with_run_for(self):
+        from did_it import evidence
+        from did_it.reconcile import _run_by_ref, _run_for
+
+        r0 = evidence.Run(index=0, command="pytest", exit_code=0,
+                          output="1 passed\n", ref="aaa", is_test_run=True)
+        r1 = evidence.Run(index=1, command="pytest", exit_code=1,
+                          output="1 failed\n", ref="bbb", is_test_run=True)
+        index = evidence.Index(runs=[r0, r1], changes=[])
+
+        assert _run_by_ref(index, "aaa") is r0
+        assert _run_by_ref(index, "bbb") is r1
+        assert _run_by_ref(index, "missing") is None
+
+        # _run_for delegates to the same lookup for an Evidence's ref.
+        e = evidence.Evidence(tool="Bash", ref="bbb")
+        assert _run_for(index, e) is _run_by_ref(index, "bbb") is r1
+
+
 class TestPartialPassRatio:
     """`N/M passing` with M > N is a partial-failure admission, not a clean pass. Left positive it
     could be asserted against a partially-red run and falsely CONTRADICTED when the count guard
