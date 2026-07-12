@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Mechanical privacy leak-gate (design doc D8).
 
-Blocks committing private content in fixtures/eval material. Run by pre-commit and CI. This is
-infrastructure — the privacy gate — separate from the did-it verification pipeline.
+Blocks committing private content. Run by pre-commit and CI, both scoped to `fixtures/`
+(pre-commit `files: ^fixtures/`; CI runs with no args → the `fixtures/` default of `iter_targets`).
+This is infrastructure — the privacy gate — separate from the did-it verification pipeline.
 
-Checks each given path (default: everything under fixtures/):
-  * deny private path patterns, obvious secrets, and emails;
-  * require the `FIXTURES_ONLY` marker in committed fixture files.
+Two-tier check over each path given (default: everything under `fixtures/`):
+  * DENY private path patterns, obvious secrets, and emails — applied to EVERY scanned path;
+  * require the `FIXTURES_ONLY` marker — ONLY for files under `fixtures/`. The marker affirms
+    "fabricated fixture" (README rule: "every committed *fixture*"), so ordinary source and any
+    eval material outside `fixtures/` are DENY-scanned when passed but not marker-checked.
 
 Exit non-zero (and print offending files) on any violation.
 """
@@ -20,8 +23,16 @@ from pathlib import Path
 DENY = [
     re.compile(r"/home/[a-z]", re.I),
     re.compile(r"/Users/[A-Za-z]"),
-    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                 # AWS key id
-    re.compile(r"\b(secret|password|passwd|api[_-]?key|token)\s*[:=]", re.I),
+    re.compile(r"\bAKIA[0-9A-Z]{16}\b"),                 # AWS access key id
+    re.compile(r"\bASIA[0-9A-Z]{16}\b"),                 # AWS temporary (STS) key id
+    re.compile(r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),   # PEM private key block
+    re.compile(r"\bghp_[0-9A-Za-z]{36}\b"),              # GitHub personal access token
+    re.compile(r"\bgithub_pat_[0-9A-Za-z_]{22,}\b"),     # GitHub fine-grained PAT
+    re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}\b"),     # Slack token
+    re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"),           # Google API key
+    # Allow an optional closing quote after the keyword so the JSON/JSONL form `"token": "abc"`
+    # (every fixture's shape) is caught, not just the bare `token: abc` colon form.
+    re.compile(r"\b(secret|password|passwd|api[_-]?key|token)[\"']?\s*[:=]", re.I),
     re.compile(r"[A-Za-z0-9._%+-]+@(?!example\.)[A-Za-z0-9.-]+\.[A-Za-z]{2,}"),  # email (allow example.*)
 ]
 MARKER = "FIXTURES_ONLY"

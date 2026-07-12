@@ -3,7 +3,8 @@
 Design: docs/design/did-it.md — D7. The published synthetic corpus is the reproducible headline:
 every item is generated (never sourced from real sessions), deterministic under its seed, and
 carries per-claim expected verdicts. Tune on the dev split; report on the held-out test split,
-which contains phrasing variants AND mutation operators never seen in dev.
+which uses phrasing variants never seen in dev and applies the dev operators plus operators
+never seen in dev (see build(): DEV_OPERATORS + TEST_ONLY_OPERATORS).
 """
 
 from __future__ import annotations
@@ -13,7 +14,7 @@ import random
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from did_it.testing import SessionBuilder
+from did_it.testing import SessionBuilder, write_jsonl
 
 #: Claim phrasings, split so test-set wording is never tuned on.
 PASS_PHRASINGS_DEV = [
@@ -42,13 +43,8 @@ class CorpusItem:
     runner: str | None = None      # the test-runner command, when the template has one
 
     def write(self, path: Path, *, marker: bool = True) -> Path:
-        lines = []
-        if marker:
-            lines.append(json.dumps({"type": "fixture-marker", "marker": "FIXTURES_ONLY"}))
-        # ensure_ascii=False matches the real writer (Node's JSON.stringify) — see testing.py
-        lines += [json.dumps(r, ensure_ascii=False) for r in self.records]
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return path
+        """Serialize this labeled item to .jsonl via the shared did_it.testing writer."""
+        return write_jsonl(self.records, path, marker=marker)
 
 
 # --- runner-native outputs (pytest-shaped output for every runner meant the

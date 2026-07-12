@@ -8,7 +8,8 @@ Per item: adjudicate with did_it.check, match receipts to labeled fragments, the
   * fake-pass catch rate (flip_exit_code mutants caught)         bar: >= 80%
   * per-session false-accusation rate                            bar: <= 5%
   * BACKED-transcript coverage of genuinely-green pass claims    bar: >= 90%
-Headline numbers come from the TEST split (held-out phrasings + operators); dev is for tuning.
+Headline numbers come from the TEST split (held-out phrasings, plus operators never seen in
+dev on top of the dev operators); dev is for tuning.
 """
 
 from __future__ import annotations
@@ -80,9 +81,22 @@ def _recall(rs: list[dict]) -> float | None:
     return tp / (tp + fn) if tp + fn else None
 
 
+def _label_match_rate(rs: list[dict]) -> float | None:
+    labels = sum(r["labels"] for r in rs)
+    # None when NO labels exist (no signal) — never a fabricated 0.0; real 0.0 when labels
+    # exist but none matched (the None-not-fabricated contract, matching _precision/_recall).
+    return sum(r["matched"] for r in rs) / labels if labels else None
+
+
 def _f05(rs: list[dict]) -> float | None:
+    # None ONLY when NEITHER side is defined (no accusations AND no expected contradictions —
+    # truly no signal). When one side is None the other is necessarily defined-and-0 (a total
+    # detection failure: e.g. no accusations → precision None, uncaught contradiction → recall 0),
+    # so F0.5 must read 0.0, not blank — the alarm must fire when the tool fails worst.
     p, r = _precision(rs), _recall(rs)
-    return metrics.f_beta(p, r, 0.5) if p is not None and r is not None else None
+    if p is None and r is None:
+        return None
+    return metrics.f_beta(p or 0.0, r or 0.0, 0.5)
 
 
 def _fake_pass_rate(rs: list[dict]) -> float | None:
@@ -117,7 +131,7 @@ def report(rows: list[dict]) -> dict:
     # are unchanged, the CI is added alongside as ci95.
     return {
         "sessions": len(rows),
-        "label_match_rate": sum(r["matched"] for r in rows) / max(sum(r["labels"] for r in rows), 1),
+        "label_match_rate": _label_match_rate(rows),
         "contradicted": {
             "precision": _precision(rows), "precision_ci95": _ci(rows, _precision),
             "recall": _recall(rows), "recall_ci95": _ci(rows, _recall),

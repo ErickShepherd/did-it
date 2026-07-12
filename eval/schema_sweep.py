@@ -62,6 +62,19 @@ _SESSION_LEVEL_CLAIM = "(entire session)"  # mirrors did_it/__init__.py's _not_e
 _SCHEMA_CAUSES = frozenset({"UnknownSchema", "ParseFailure"})
 
 
+def _crash_summary(e: Exception) -> str:
+    """Path-free one-line label for a library-boundary crash. check() re-raises OSError
+    (missing/unreadable file) whose str() carries the full private ~/.claude/projects/<repo>/…
+    path — so record only the type and, for OSError, its errno + the basename, never the raw
+    message (design D7/D8, SYS-3). The basename is the session file (a UUID), not the private
+    repo path.
+    """
+    if isinstance(e, OSError):
+        base = os.path.basename(e.filename) if e.filename else "?"
+        return f"{type(e).__name__}(errno={e.errno}, file={base})"
+    return type(e).__name__
+
+
 def _msg_count(rec_types: Counter[str]) -> int:
     """Records that ARE message records (assistant/user) — the SRV2.2 volume-floor population.
     Ambient versioned records (attachment/system) carry a `version` but are not what the pipeline
@@ -141,17 +154,27 @@ def main(argv: list[str]) -> int:
     print(f"files with a candidate-version record: {len(target_files)}\n")
 
     for v in sorted(candidate_set):
-        unknown_blocks = {t for t in block_types[v]} - KNOWN_BLOCK_TYPES
-        unknown_recs = {t for t in rec_types[v]} - KNOWN_RECORD_TYPES
-        total_versioned = sum(rec_types[v].values())
-        print(f"[{v}]  sessions: {len(files_with[v])}   message records: {_msg_count(rec_types[v])}"
+        rec_c, block_c = rec_types[v], block_types[v]
+        # `type` strings are attacker-controlled + unbounded; only the KNOWN_* labels (module
+        # constants, never transcript-derived) are safe to echo. Unknowns are counted, never
+        # labelled — the raw label could smuggle a secret onto publishable stdout (design D7/D8).
+        known_recs = {t: rec_c[t] for t in sorted(KNOWN_RECORD_TYPES) if t in rec_c}
+        known_blocks = {t: block_c[t] for t in sorted(KNOWN_BLOCK_TYPES) if t in block_c}
+        unknown_rec_types = set(rec_c) - KNOWN_RECORD_TYPES
+        unknown_block_types = set(block_c) - KNOWN_BLOCK_TYPES
+        unknown_rec_n = sum(rec_c[t] for t in unknown_rec_types)
+        unknown_block_n = sum(block_c[t] for t in unknown_block_types)
+        total_versioned = sum(rec_c.values())
+        print(f"[{v}]  sessions: {len(files_with[v])}   message records: {_msg_count(rec_c)}"
               f"   (all versioned records: {total_versioned})")
-        print(f"       record types: {dict(rec_types[v])}")
-        print(f"       block types:  {dict(block_types[v])}")
-        if unknown_blocks:
-            print(f"       unknown (unconsumed) block types: {sorted(unknown_blocks)}")
-        if unknown_recs:
-            print(f"       unknown record types: {sorted(unknown_recs)}")
+        print(f"       record types: {known_recs}")
+        print(f"       block types:  {known_blocks}")
+        if unknown_block_types:
+            print(f"       unknown (unconsumed) block types: {len(unknown_block_types)} distinct, "
+                  f"{unknown_block_n} records (labels withheld — D7/D8)")
+        if unknown_rec_types:
+            print(f"       unknown record types: {len(unknown_rec_types)} distinct, "
+                  f"{unknown_rec_n} records (labels withheld — D7/D8)")
     print()
 
     # Pass 2 — end-to-end check() over every file with a candidate-version record (SRV2.1).
@@ -166,7 +189,7 @@ def main(argv: list[str]) -> int:
         try:
             receipts = did_it.check(fp)
         except Exception as e:  # noqa: BLE001 — a raise at the library boundary IS the finding
-            crashes.append(f"{type(e).__name__}: {e}"[:120])
+            crashes.append(_crash_summary(e))
             continue
         ok += 1
         if receipts:

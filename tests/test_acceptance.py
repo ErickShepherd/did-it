@@ -164,6 +164,47 @@ def test_non_message_record_types_are_skipped(tmp_path):
     assert verdict_of(receipts, "tests pass") == Verdict.BACKED_TRANSCRIPT
 
 
+def test_noise_mid_session_keeps_timestamps_monotonic():
+    # noise() called after real records must not plant a stale/absent timestamp: the old
+    # implementation appended a hardcoded 00:00:00 queue-operation (earlier than its neighbors)
+    # and a timestamp-less ai-title, breaking the builder's monotonic-timestamp contract.
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "3 passed in 0.10s")
+    b.noise()
+    b.assistant_text("All 3 tests pass.")
+    assert all("timestamp" in r for r in b.records)
+    stamps = [r["timestamp"] for r in b.records]
+    assert stamps == sorted(stamps)
+    assert len(set(stamps)) == len(stamps)  # strictly increasing, no dupes
+
+
+def test_write_jsonl_is_shared_by_builder_and_corpus(tmp_path):
+    # CorpusItem.write and SessionBuilder.write_jsonl must route through the one shared
+    # did_it.testing.write_jsonl serializer, so their byte output can never drift.
+    from did_it.testing import write_jsonl
+    from eval.corpus import CorpusItem
+
+    records = [{"type": "user", "message": {"content": "héllo — u+2028 "}}]
+
+    via_builder = SessionBuilder()
+    via_builder.records = list(records)
+    builder_out = via_builder.write_jsonl(tmp_path / "b.jsonl").read_text(encoding="utf-8")
+
+    item = CorpusItem(session_id="s", template="t", records=list(records))
+    corpus_out = item.write(tmp_path / "c.jsonl").read_text(encoding="utf-8")
+
+    direct_out = write_jsonl(records, tmp_path / "d.jsonl").read_text(encoding="utf-8")
+
+    assert builder_out == corpus_out == direct_out
+    # marker + one record, ensure_ascii=False preserves raw UTF-8 (no \u escapes)
+    assert "FIXTURES_ONLY" in direct_out
+    assert " " in direct_out and "\\u2028" not in direct_out
+    # marker=False drops the fixture marker line
+    no_marker = write_jsonl(records, tmp_path / "e.jsonl", marker=False).read_text(encoding="utf-8")
+    assert "FIXTURES_ONLY" not in no_marker
+
+
 # --- CLI contract: exit codes + receipts on stdout ----------------------------------
 
 

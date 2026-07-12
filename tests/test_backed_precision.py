@@ -255,12 +255,70 @@ class TestExitCodeRunContextOnly:
             c = extraction._classify(s)
             assert c is None or c.kind != "exit-code", s
 
+    def test_bare_exited_count_is_not_an_exit_code_claim(self):
+        from did_it import extraction
+
+        for s in ("the loop exited 3 times", "exited 2 handlers", "the retry exits 4 times"):
+            c = extraction._classify(s)
+            assert c is None or c.kind != "exit-code", s
+
     def test_run_context_exit_codes_still_classify(self):
         from did_it import extraction
 
-        for s in ("exit code 1", "exited with 2", "rc=3", "returned code 5"):
+        for s in ("exit code 1", "exited with 2", "exited with code 4", "rc=3", "returned code 5"):
             c = extraction._classify(s)
             assert c is not None and c.kind == "exit-code", s
+
+
+class TestExitCodeNoneCountDoesNotFalselyBack:
+    """An exit-code claim with no stated count (`count=None`) reconciled against an
+    ERRORED run (`exit_code=None` — is_error with no parsable code) must not collapse
+    `None == None` into a false BACKED-transcript. Extraction always sets count on the
+    live path today, but the reconcile handler must not endorse on absent-vs-absent
+    (fail-closed, like the unmapped-kind guard)."""
+
+    def test_none_count_vs_errored_run_is_not_backed(self, tmp_path):
+        from did_it import evidence, extraction, transcript
+        from did_it.reconcile import _exit_code
+
+        b = SessionBuilder()
+        b.user_text("run it")
+        # is_error result whose output has no "Exit code N" prefix -> exit_code=None.
+        b.tool_call("Bash", {"command": "pytest -q"}, "Segmentation fault", is_error=True)
+        b.assistant_text("done")
+        session = transcript.parse(b.write_jsonl(tmp_path / "t.jsonl"))
+        index = evidence.build_index(session)
+        assert index.runs_before(999)[-1].exit_code is None  # the run really errored
+
+        claim = extraction.Claim(text="exit code", utterance_index=999,
+                                 kind="exit-code", is_procedural=True, count=None)
+        receipt = _exit_code(claim, session, index)
+        assert receipt.verdict != Verdict.BACKED_TRANSCRIPT
+
+
+class TestRunByRefSharedLookup:
+    """The ref->Run lookup at the --verify site (`_verify_pairs`) and the evidence-driven
+    lookup (`_run_for`) must share ONE implementation (`_run_by_ref`), not two inline copies
+    that can drift. Pins: `_run_by_ref` exists, finds a run by ref / returns None on a miss,
+    and `_run_for` agrees with it for the same ref."""
+
+    def test_run_by_ref_finds_matches_and_agrees_with_run_for(self):
+        from did_it import evidence
+        from did_it.reconcile import _run_by_ref, _run_for
+
+        r0 = evidence.Run(index=0, command="pytest", exit_code=0,
+                          output="1 passed\n", ref="aaa", is_test_run=True)
+        r1 = evidence.Run(index=1, command="pytest", exit_code=1,
+                          output="1 failed\n", ref="bbb", is_test_run=True)
+        index = evidence.Index(runs=[r0, r1], changes=[])
+
+        assert _run_by_ref(index, "aaa") is r0
+        assert _run_by_ref(index, "bbb") is r1
+        assert _run_by_ref(index, "missing") is None
+
+        # _run_for delegates to the same lookup for an Evidence's ref.
+        e = evidence.Evidence(tool="Bash", ref="bbb")
+        assert _run_for(index, e) is _run_by_ref(index, "bbb") is r1
 
 
 class TestPartialPassRatio:
@@ -290,6 +348,39 @@ class TestPartialPassRatio:
         b.assistant_text("12/15 tests passing.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "12/15") != Verdict.CONTRADICTED
+
+
+class TestNegatedProceduralClaims:
+    """`file-created`/`command-ran` had no negation gate, so a denial ("never created
+    config.py", "never ran the suite") was misread as a POSITIVE claim and could then be
+    falsely BACKED — endorsing a claim the author explicitly denied making. A leading
+    negation within the verb's own clause must drop the positive claim (safe direction)."""
+
+    def test_negated_file_created_is_not_a_positive_claim(self):
+        from did_it import extraction
+
+        for s in ("never created config.py", "no longer wrote config.py",
+                  "I hasn't added helper.py"):
+            c = extraction._classify(s)
+            assert c is None or c.kind != "file-created" or c.polarity != "positive", s
+
+    def test_negated_command_ran_is_not_a_positive_claim(self):
+        from did_it import extraction
+
+        for s in ("never ran the suite", "no longer ran the tests",
+                  "never executed the migration"):
+            c = extraction._classify(s)
+            assert c is None or c.kind != "command-ran" or c.polarity != "positive", s
+
+    def test_genuine_procedural_claims_still_classify_positive(self):
+        from did_it import extraction
+
+        for s, kind in (("created config.py", "file-created"),
+                        ("ran the suite", "command-ran"),
+                        # a bare "no"/"not" elsewhere in the sentence must NOT drop it
+                        ("I ran the tests, no problem here", "command-ran")):
+            c = extraction._classify(s)
+            assert c is not None and (c.kind, c.polarity) == (kind, "positive"), s
 
 
 class TestNarrationCoOccurrence:

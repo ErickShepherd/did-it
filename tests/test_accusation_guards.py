@@ -122,6 +122,34 @@ class TestCountCorroboration:
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "10/12 tests passing") == Verdict.BACKED_TRANSCRIPT
 
+    def test_verbal_of_partial_pass_is_not_accused(self, tmp_path):
+        # Sibling of the slash form: "12 of 15 tests pass" is a PARTIAL admission (3 did not
+        # pass). TEST_PASS's slash-only guard misses it and branch 1 grabs the WHOLE (15) as a
+        # positive pass of all 15 → falsely CONTRADICTED against this matching red run. Must not
+        # accuse; the honest report is BACKED-transcript.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "3 failed, 12 passed in 0.30s", exit_code=1)
+        b.assistant_text("12 of 15 tests pass after my change.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "12 of 15 tests pass") == Verdict.BACKED_TRANSCRIPT
+
+    def test_verbal_out_of_partial_pass_is_not_accused(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "3 failed, 12 passed in 0.30s", exit_code=1)
+        b.assistant_text("12 out of 15 passed after my change.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "12 out of 15 passed") == Verdict.BACKED_TRANSCRIPT
+
+    def test_spaced_slash_partial_pass_is_not_accused(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "3 failed, 12 passed in 0.30s", exit_code=1)
+        b.assistant_text("12 / 15 passing after my change.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "12 / 15 passing") == Verdict.BACKED_TRANSCRIPT
+
     def test_counted_fake_green_still_accuses_on_count_mismatch(self, tmp_path):
         # "All 12 tests pass" vs "1 failed, 11 passed" is the counted money case — the
         # corroboration guard fires only on exact agreement with the run's own summary.

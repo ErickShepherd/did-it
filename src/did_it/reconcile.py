@@ -31,6 +31,10 @@ def _receipt(claim, verdict: Verdict, e: ev.Evidence | None = None, note: str | 
 def _absent(claim, session, note: str) -> Receipt:  # noqa: ANN001
     """No evidence found: NOT_EVALUABLE if it may sit in an un-ingested sidechain, else UNSUPPORTED."""
     if session.used_subagents:
+        # `note` (the caller's UNSUPPORTED-context reason, e.g. "no valid test run") is deliberately
+        # superseded here: with subagents in play, absence means "may live in an un-ingested
+        # sidechain", not "unsupported". This exact string is an off-bar signal in eval/schema_sweep.py
+        # (per-claim NOT-EVALUABLE), so keep it fixed rather than threading the caller's note through.
         return _receipt(claim, Verdict.NOT_EVALUABLE, note="evidence may be in an un-ingested sidechain (v1.1)")
     return _receipt(claim, Verdict.UNSUPPORTED, note=note)
 
@@ -76,11 +80,15 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
     return _receipt(claim, Verdict.UNSUPPORTED, e, note=e.note)
 
 
-def _run_for(index: ev.Index, e: ev.Evidence) -> ev.Run | None:
+def _run_by_ref(index: ev.Index, ref: str | None) -> ev.Run | None:
     for run in index.runs:
-        if run.ref == e.ref:
+        if run.ref == ref:
             return run
     return None
+
+
+def _run_for(index: ev.Index, e: ev.Evidence) -> ev.Run | None:
+    return _run_by_ref(index, e.ref)
 
 
 def _named_check(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
@@ -131,7 +139,7 @@ def _exit_code(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
         return _absent(claim, session, "no command run at utterance-time")
     run = runs[-1]
     e = ev.Evidence(tool="Bash", ref=run.ref, exit_code=run.exit_code, at_index=run.index, tier="witness")
-    if run.exit_code == claim.count:
+    if claim.count is not None and run.exit_code == claim.count:
         return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e)
     return _receipt(claim, Verdict.UNSUPPORTED, e, note=f"last run exited {run.exit_code}, claim says {claim.count}")
 
@@ -187,7 +195,7 @@ def _apply_verification(pairs, index: ev.Index, repo: str) -> None:  # noqa: ANN
             or claim.polarity != "positive"
         ):
             continue
-        run = next((r for r in index.runs if r.ref == receipt.evidence_ref), None)
+        run = _run_by_ref(index, receipt.evidence_ref)
         if run is None:
             continue
         if not verify.is_verifiable_command(run.command):

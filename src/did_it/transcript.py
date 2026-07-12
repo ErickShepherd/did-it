@@ -17,6 +17,7 @@ Schema notes (measured on real transcripts):
 from __future__ import annotations
 
 import json
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -53,13 +54,18 @@ def _version_tuple(v: str) -> tuple[int, int, int] | None:
     parts = v.split(".")
     if len(parts) != 3:
         return None
+    # Reject anything laxer than semver before int() sees it: int() accepts underscore
+    # digit-separators ("2_07" -> 207), leading '+'/'-', and surrounding whitespace, any of
+    # which would silently parse a non-semver string as a supported version. `isascii()`
+    # also excludes Unicode digits (`'²'.isdigit()` is True) that int() would reject anyway.
+    if not all(p.isascii() and p.isdigit() for p in parts):
+        return None
     try:
         return (int(parts[0]), int(parts[1]), int(parts[2]))
     except ValueError:
-        # Fail closed to "unsupported", never crash. The old `str.isdigit()` gate accepted
-        # Unicode digits (`'²'.isdigit()` is True) that int() rejects, and even `.isdecimal()`
-        # would not stop a huge all-decimal part from tripping int()'s int_max_str_digits
-        # limit — both raised an uncaught ValueError on a crafted version.
+        # Fail closed to "unsupported", never crash. Even an all-decimal part that clears the
+        # isdigit() gate can trip int()'s int_max_str_digits limit on a huge crafted version,
+        # so keep the ValueError backstop.
         return None
 
 
@@ -94,7 +100,13 @@ def parse(path: str | Path) -> Session:
     to the CLI as a usage error. Never silently drops an unreadable message line.
     """
     path = Path(path)
-    size = path.stat().st_size  # OSError (missing/unreadable) propagates as a usage error
+    st = path.stat()  # OSError (missing/unreadable) propagates as a usage error
+    if not stat.S_ISREG(st.st_mode):
+        # A FIFO/char-device/socket reports st_size 0, so the byte cap below can't catch it,
+        # and read_text would then BLOCK forever on a pipe with no writer — a hang escapes the
+        # fail-closed backstop (check() cannot catch a hang). Only regular files are evaluable.
+        raise ParseFailure(f"{path.name}: not a regular file")
+    size = st.st_size
     if size > _MAX_TRANSCRIPT_BYTES:
         # Fail closed BEFORE the whole-file read, so a huge file is NOT-EVALUABLE, not a crash.
         raise ParseFailure(f"{path.name}: {size} bytes exceeds the {_MAX_TRANSCRIPT_BYTES}-byte cap")

@@ -19,6 +19,39 @@ def test_private_path_is_flagged(tmp_path):
     assert leak_gate.scan(f)
 
 
+def test_json_form_secret_is_flagged(tmp_path):
+    """The JSON/JSONL form `"token": "abc"` — the exact shape every fixture uses — must trip the
+    secret regex; the closing quote after the keyword previously blocked the `\\s*[:=]` match."""
+    for line in (
+        '{"token": "abc123"}',
+        '{"api_key": "xyz"}',
+        '{"password": "hunter2"}',
+        '{"secret" : "s3cr3t"}',
+    ):
+        f = tmp_path / "leak.txt"
+        f.write_text(line)
+        assert any("deny pattern" in p for p in leak_gate.scan(f)), line
+
+
+def test_high_entropy_token_shapes_are_flagged(tmp_path):
+    """Beyond AKIA + keyword-colon, the gate must catch the common concrete secret shapes:
+    PEM private keys, GitHub tokens, Slack tokens, Google API keys, and AWS-temp keys. Each is a
+    near-zero-FP fixed prefix, so a match is a real leak."""
+    for secret in (
+        "-----BEGIN RSA PRIVATE KEY-----",
+        "-----BEGIN PRIVATE KEY-----",
+        "ghp_" + "a" * 36,
+        "github_pat_" + "A1b2C3d4E5" * 5,
+        "xoxb-1234567890-abcdefABCDEF",
+        "xoxp-0987654321-ZYXwvu",
+        "AIza" + "aB3-_dEf" * 4 + "aBc",  # AIza + 35 chars
+        "ASIA" + "1234567890ABCDEF",
+    ):
+        f = tmp_path / "leak.txt"
+        f.write_text(secret)
+        assert any("deny pattern" in p for p in leak_gate.scan(f)), secret
+
+
 def test_fixture_missing_marker_is_flagged(tmp_path):
     d = tmp_path / "fixtures"
     d.mkdir()
@@ -50,6 +83,27 @@ class TestMarkerEnforcedForAllFixtureFiles:
         f = tmp_path / "src.log"
         f.write_text("ordinary file, not under fixtures/")
         assert leak_gate.scan(f) == []
+
+    def test_deny_is_global_marker_is_fixtures_scoped(self, tmp_path):
+        """Pin the module docstring's two-tier contract: DENY patterns apply to EVERY scanned
+        path (inside or outside fixtures/), while the FIXTURES_ONLY marker is required ONLY for
+        files under fixtures/. Guards against a future 'broaden the rule' that would wrongly
+        demand the marker on eval material / source outside fixtures/."""
+        # DENY is global: a private path is flagged even outside fixtures/.
+        outside_secret = tmp_path / "eval" / "snapshot.jsonl"
+        outside_secret.parent.mkdir()
+        outside_secret.write_text('{"path": "/home/alice/secret"}')
+        assert any("deny pattern" in p for p in leak_gate.scan(outside_secret))
+        # Marker is fixtures-scoped: a markerless, secret-free file OUTSIDE fixtures/ is clean...
+        outside_clean = tmp_path / "eval" / "clean.jsonl"
+        outside_clean.write_text('{"note": "ordinary eval material, no marker"}')
+        assert leak_gate.scan(outside_clean) == []
+        # ...but the SAME content UNDER fixtures/ demands the marker.
+        d = tmp_path / "fixtures"
+        d.mkdir()
+        inside = d / "clean.jsonl"
+        inside.write_text('{"note": "ordinary eval material, no marker"}')
+        assert any("marker" in p for p in leak_gate.scan(inside))
 
 
 class TestKnownRepoNamesMechanism:

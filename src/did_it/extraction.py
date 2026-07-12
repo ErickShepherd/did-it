@@ -149,6 +149,18 @@ TEST_FAIL = re.compile(
     re.I,
 )
 
+#: Partial pass/total ratios in every sibling form the slash-only TEST_PASS branch misses:
+#: unspaced "12/15", spaced "12 / 15", and verbal "12 of 15" / "12 out of 15", each followed
+#: by pass/green. When the whole exceeds the passed count some tests did NOT pass — a partial
+#: admission, not a clean pass. TEST_PASS's branches 1/2 otherwise grab the WHOLE as the count,
+#: so left positive it reads as a pass of all N and, against a partially-red run, is falsely
+#: CONTRADICTED. Detected here so `_classify` can route every form negative.
+PARTIAL_RATIO = re.compile(
+    rf"\b(?P<passed>{_NUM})\s*(?:/|out\s+of|of)\s*(?P<whole>{_NUM})\s+"
+    rf"(?:tests?\s+)?(?:pass(?:ing|ed|es)?|green)\b",
+    re.I,
+)
+
 #: Named non-test checks claimed clean. The tool word doubles as the evidence-binding token.
 CHECK_WORDS = (
     r"(?:ruff|lint(?:er)?|mypy|pyright|flake8|black|isort|eslint|prettier|tsc|typecheck|"
@@ -161,11 +173,12 @@ CHECK_PASS = re.compile(
     re.I,
 )
 
-#: `return(?:ed|s)?` REQUIRES a following `code`: bare "returns 0 when empty" / "returned 3
-#: results" are behavioral prose, not an exit-code claim. Run-context forms
-#: (exit/exited with/exit code, rc=, returned code N) still match.
+#: `return(?:ed|s)?` and `exit(?:ed|s)?` both REQUIRE a run-context anchor (`with`/`code`):
+#: bare "returns 0 when empty" / "returned 3 results" and bare "the loop exited 3 times" /
+#: "exits 2 handlers" are behavioral prose, not an exit-code claim. Run-context forms
+#: (exit(ed) with, exit(ed) code, rc=, returned code N) still match.
 EXIT_CODE = re.compile(
-    r"\b(?:exit(?:ed|s)?(?:\s+with)?(?:\s+code)?|rc|return(?:ed|s)?\s+code)"
+    r"\b(?:exit(?:ed|s)?\s+with(?:\s+code)?|exit(?:ed|s)?\s+code|rc|return(?:ed|s)?\s+code)"
     r"\s*[=:]?\s*(?P<code>\d+)\b",
     re.I,
 )
@@ -183,6 +196,17 @@ FILE_CREATED = re.compile(
 
 COMMAND_RAN = re.compile(
     r"\b(?:ran|re-?ran|executed|invoked|launched|installed|committed|merged|built|rebuilt)\b",
+    re.I,
+)
+
+#: Leading negations that invert an apparent file-created/command-ran claim into a DENIAL
+#: ("never created config.py", "never ran the suite"). FILE_CREATED/COMMAND_RAN match only
+#: past-tense verbs, so the reachable negators are the clausal ones ("never", "no longer",
+#: an aux + n't); bare "no"/"not" are excluded so an unrelated "…, no problem" can't drop a
+#: genuine claim. Left ungated, a denial reads as POSITIVE and can be falsely BACKED.
+PROC_NEG = re.compile(
+    r"\b(?:never|no longer|didn't|did not|doesn't|does not|hasn't|has not|"
+    r"haven't|have not|wasn't|was not|weren't|were not|couldn't|could not|failed to)\b",
     re.I,
 )
 
@@ -214,6 +238,19 @@ def _pass_clause_to_end(sentence: str, pos: int) -> str:
     return sentence[sentence.rfind(";", 0, pos) + 1:]
 
 
+def _proc_negated(sentence: str, verb_start: int) -> bool:
+    """True if a leading negation ("never ran", "no longer created") within the verb's own
+    `;`-clause and just before it inverts a file-created/command-ran claim into a denial.
+
+    Scoped to the clause (after the last `;`) and the few tokens preceding the verb so a
+    negation in an EARLIER clause ("never touched X; wrote config.py") can't wrongly drop a
+    genuine claim. Dropping a negated claim is the safe direction — it never fabricates one.
+    """
+    clause = sentence[sentence.rfind(";", 0, verb_start) + 1:verb_start]
+    window = " ".join(clause.split()[-4:])
+    return bool(PROC_NEG.search(window))
+
+
 def _classify(sentence: str) -> Claim | None:
     """Classify one clean prose sentence; None if it makes no claim at all."""
     c = Claim(text=sentence, utterance_index=-1)
@@ -235,13 +272,15 @@ def _classify(sentence: str) -> Claim | None:
         if m else negated
     )
     if m and not pass_negated:
-        # A "12/15 passing" ratio where the total exceeds the passed count is a PARTIAL result
-        # (3 did not pass) — a failure admission, not a clean pass. Left positive it could be
-        # asserted as a pass against a partially-red run and, when the count guard misses (the
-        # claim's count != the run's own passed count), falsely CONTRADICTED. Route it negative
-        # so it is never an accusation.
-        if m.group("count3") and m.group("total") and (
-            int(m.group("total").replace(",", "")) > int(m.group("count3").replace(",", ""))
+        # A partial ratio ("12/15", spaced "12 / 15", verbal "12 of 15" / "12 out of 15") where
+        # the whole exceeds the passed count is a PARTIAL result (some did not pass) — a failure
+        # admission, not a clean pass. Left positive it could be asserted as a pass against a
+        # partially-red run and, when the count guard misses (the claim's count != the run's own
+        # passed count), falsely CONTRADICTED. PARTIAL_RATIO covers every sibling form the
+        # slash-only TEST_PASS branch missed. Route it negative so it is never an accusation.
+        mp = PARTIAL_RATIO.search(sentence)
+        if mp and (
+            int(mp.group("whole").replace(",", "")) > int(mp.group("passed").replace(",", ""))
         ):
             c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
             return c
@@ -275,12 +314,13 @@ def _classify(sentence: str) -> Claim | None:
         return c
 
     m = FILE_CREATED.search(sentence)
-    if m:
+    if m and not _proc_negated(sentence, m.start()):
         c.kind, c.is_procedural = "file-created", True
         c.tokens.insert(0, m.group("path"))
         return c
 
-    if COMMAND_RAN.search(sentence):
+    mc = COMMAND_RAN.search(sentence)
+    if mc and not _proc_negated(sentence, mc.start()):
         c.kind, c.is_procedural = "command-ran", True
         return c
 

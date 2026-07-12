@@ -6,7 +6,10 @@ test-first treatment as the pipeline.
 
 from __future__ import annotations
 
+import json
 import math
+
+import pytest
 
 import did_it
 from did_it.verdicts import Verdict
@@ -71,6 +74,21 @@ def test_mutants_remain_internally_consistent_transcripts(tmp_path):
         assert s.records, name
 
 
+def test_operator_registries_are_consistent():
+    # The three parallel registries must agree; the real module must load clean.
+    operators._assert_registries_consistent()
+
+
+def test_operator_registry_drift_is_caught_at_the_guard(monkeypatch):
+    # Drop an operator from one registry: the fail-fast guard must catch it up front,
+    # not defer to a downstream KeyError in applicable()/apply().
+    drifted = dict(operators._MUTATORS)
+    drifted.pop("miscount")
+    monkeypatch.setattr(operators, "_MUTATORS", drifted)
+    with pytest.raises(AssertionError):
+        operators._assert_registries_consistent()
+
+
 # --- corpus: deterministic build, frozen split ---------------------------------------
 
 
@@ -88,6 +106,20 @@ def test_corpus_has_dev_test_split_and_held_out_operators():
     dev_ops = {i.operator for i in items if i.split == "dev" and i.operator}
     test_ops = {i.operator for i in items if i.split == "test" and i.operator}
     assert test_ops - dev_ops, "test split must contain operators never seen in dev"
+
+
+def test_docstrings_do_not_overstate_operator_holdout():
+    # Reality: build() applies DEV_OPERATORS + TEST_ONLY_OPERATORS to the test split,
+    # so the test-split operator set is NOT wholly "never seen in dev" — the dev
+    # operators are reused. The module docstrings must reflect that, not overstate it.
+    items = corpus.build(seed=0)
+    test_ops = {i.operator for i in items if i.split == "test" and i.operator}
+    assert set(corpus.DEV_OPERATORS) <= test_ops        # dev operators ARE seen in test
+    assert set(corpus.TEST_ONLY_OPERATORS) <= test_ops  # plus the genuinely held-out ones
+    # Neither docstring may frame ALL test-split operators as unseen in dev.
+    assert "AND mutation operators never seen in dev" not in corpus.__doc__
+    from eval import run as eval_run
+    assert "held-out phrasings + operators" not in eval_run.__doc__
 
 
 def test_corpus_labels_carry_expected_verdicts():
@@ -200,6 +232,45 @@ def test_report_undefined_metrics_are_none_not_perfect():
     assert out["contradicted"]["precision_ci95"] is None
     assert out["fake_pass_catch"]["ci95"] is None
     assert out["backed_coverage_green_runs"]["ci95"] is None
+
+
+def test_f05_is_zero_not_none_on_total_detection_failure():
+    # Total detection failure: expected contradictions exist but the tool made NO accusation
+    # (tp=0, fp=0 → precision undefined; fn>0 → recall defined-and-0). The headline F0.5 must
+    # show 0.0 (the tool failed worst), not go blank — None is reserved for NEITHER side defined.
+    from eval import run as eval_run
+
+    fail = [{"session": "s", "operator": None, "template": "hedged", "labels": 1,
+             "matched": 0, "expected_contradicted": 1, "true_contradicted": 0,
+             "false_contradicted": 0, "got": {}}]
+    assert eval_run._precision(fail) is None      # no accusations → precision undefined
+    assert eval_run._recall(fail) == 0.0          # a contradiction went uncaught → recall 0
+    assert eval_run._f05(fail) == 0.0             # so F0.5 is 0.0, not blank
+
+    # No signal at all (no accusations AND no expected contradictions): both sides undefined → None.
+    silent = [{"session": "s", "operator": None, "template": "hedged", "labels": 0,
+               "matched": 0, "expected_contradicted": 0, "true_contradicted": 0,
+               "false_contradicted": 0, "got": {}}]
+    assert eval_run._precision(silent) is None
+    assert eval_run._recall(silent) is None
+    assert eval_run._f05(silent) is None
+
+
+def test_label_match_rate_is_none_not_fabricated_zero_on_zero_labels():
+    # No labels present in the rowset → no signal → the rate must be None, NOT a fabricated 0.0
+    # (the None-not-fabricated contract; matches _precision/_recall's "None when no signal").
+    from eval import run as eval_run
+
+    no_labels = [{"session": "s", "operator": None, "template": "green-run", "labels": 0,
+                  "matched": 0, "expected_contradicted": 0, "true_contradicted": 0,
+                  "false_contradicted": 0, "got": {}}]
+    assert eval_run.report(no_labels)["label_match_rate"] is None
+
+    # Labels present but none matched → a real 0.0 (signal exists, tool scored 0), not None.
+    missed = [{"session": "s", "operator": None, "template": "green-run", "labels": 2,
+               "matched": 0, "expected_contradicted": 0, "true_contradicted": 0,
+               "false_contradicted": 0, "got": {}}]
+    assert eval_run.report(missed)["label_match_rate"] == 0.0
 
 
 def _row(session, *, operator=None, template="green-run", expected=0, true=0, false=0, backed=False):
@@ -334,6 +405,106 @@ def test_anchor_scan_aggregates_need_no_ack(monkeypatch, capsys):
     assert rc == 0
     assert "REFUSED" not in cap.err
     assert "LOCAL-ONLY" not in cap.out
+
+
+def test_anchor_scan_toctou_delete_never_leaks_the_private_transcript_path(
+    monkeypatch, capsys, tmp_path
+):
+    # A transcript can vanish between glob@59 and check@78 (TOCTOU delete). check() re-raises the
+    # resulting OSError, whose str() carries the full private ~/.claude/projects/<repo>/… path.
+    # anchor_scan's parse-try catches only UnknownSchema/ParseFailure, so an unwrapped check() lets
+    # that OSError propagate out of main() as a traceback, leaking the path to stderr. It must
+    # instead catch OSError and record only the exception type — never the raw message (SYS-3, D7/D8).
+    import errno as errno_mod
+
+    from eval import anchor_scan
+
+    secret_dir = "-home-user-SECRETLEAK"
+    secret_path = f"/home/user/.claude/projects/{secret_dir}/session.jsonl"
+    fp = tmp_path / "crafted.jsonl"
+    fp.write_text(
+        json.dumps(
+            {
+                "version": "2.1.207",
+                "type": "assistant",
+                "message": {"content": [{"type": "text", "text": "hello"}]},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(anchor_scan.glob, "glob", lambda *a, **k: [str(fp)])
+
+    def _boom(_p):
+        raise FileNotFoundError(errno_mod.ENOENT, "No such file or directory", secret_path)
+
+    monkeypatch.setattr(anchor_scan.did_it, "check", _boom)
+    rc = anchor_scan.main(["1"])
+    cap = capsys.readouterr()
+    assert rc == 0
+    assert secret_path not in cap.out and secret_path not in cap.err
+    assert secret_dir not in cap.out and secret_dir not in cap.err
+
+
+# --- schema_sweep privacy gate -------------------------------------
+
+
+def test_schema_sweep_never_echoes_raw_transcript_type_labels(monkeypatch, capsys, tmp_path):
+    # Record/block `type` strings are attacker-controlled + unbounded; a crafted transcript that
+    # rides them can smuggle a secret to the sweep's publishable stdout (design D7/D8). The sweep
+    # must echo only the known, module-defined type labels and aggregate unknowns without labels.
+    from eval import schema_sweep
+
+    secret_rec = "SECRET_RECORD_TYPE_sk-live-abc123"
+    secret_block = "SECRET_BLOCK_TYPE_ghp_xyz789"
+    fp = tmp_path / "crafted.jsonl"
+    fp.write_text(
+        json.dumps(
+            {
+                "version": "2.1.207",
+                "type": secret_rec,
+                "message": {"content": [{"type": secret_block}]},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(schema_sweep.glob, "glob", lambda *a, **k: [str(fp)])
+    schema_sweep.main(["2.1.207"])
+    out = capsys.readouterr().out
+    assert secret_rec not in out
+    assert secret_block not in out
+
+
+def test_schema_sweep_crash_never_leaks_the_private_transcript_path(
+    monkeypatch, capsys, tmp_path
+):
+    # check() re-raises OSError (missing/unreadable file) whose str() carries the full private
+    # ~/.claude/projects/<repo>/… path. The library-boundary crash handler must record only a
+    # path-free summary (type + errno + basename) — never the raw message — so the sweep's
+    # publishable stdout can't leak the private path (design D7/D8, SYS-3).
+    import errno as errno_mod
+
+    from eval import schema_sweep
+
+    secret_dir = "-home-user-SECRETLEAK"  # short: survives the 120-char crash cap, as real repos do
+    secret_path = f"/home/user/.claude/projects/{secret_dir}/session.jsonl"
+    fp = tmp_path / "crafted.jsonl"
+    fp.write_text(
+        json.dumps({"version": "2.1.207", "type": "assistant"}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(schema_sweep.glob, "glob", lambda *a, **k: [str(fp)])
+
+    def _boom(_p):
+        raise FileNotFoundError(errno_mod.ENOENT, "No such file or directory", secret_path)
+
+    monkeypatch.setattr(schema_sweep.did_it, "check", _boom)
+    schema_sweep.main(["2.1.207"])
+    out = capsys.readouterr().out
+    assert secret_path not in out
+    assert secret_dir not in out
+    assert "library-boundary crashes: 1" in out
 
 
 def test_session_builder_timestamps_stay_valid_and_monotonic_past_an_hour():

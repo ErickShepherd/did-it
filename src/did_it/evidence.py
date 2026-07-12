@@ -71,7 +71,7 @@ _NON_EXECUTING = re.compile(
 )
 
 
-def _strippable(command: str) -> bool:
+def _scan_bounded(command: str) -> bool:
     """A command whose scan cost is bounded; anything else is never a witness (abstain).
 
     The count must cover EVERY anchor the runner/tool matchers key on — `$(` and backtick
@@ -88,6 +88,16 @@ def _stripped(command: str) -> str:
     return QUOTED.sub(" ", HEREDOC.sub(" ", command))
 
 
+#: Bash sub-command separators, including newline and bare `&` (bash treats a newline like
+#: `;`, and `&` backgrounds the preceding command). Omitting them lumped a multi-line or
+#: backgrounded `--version` clause in with a real runner's clause and dropped its green run
+#: (false CONTRADICTED). `&&` precedes `&` in the alternation so a chain operator is never
+#: split into two. Splitting first means the per-clause runner scan never sees these anchors,
+#: so the `_scan_bounded` linearity cap (which bounds `\n`) is preserved, not weakened. Shared
+#: by `is_test_command` and `_runner_clause` so the two can't drift to different separator sets.
+_CLAUSE_SEP = re.compile(r"&&|\|\||;|\||\n|&")
+
+
 def is_test_command(command: str) -> bool:
     """True if the Bash command actually EXECUTES a test runner (not merely mentions one).
 
@@ -96,11 +106,11 @@ def is_test_command(command: str) -> bool:
     command, so an unrelated `--version` on a different sub-command (`pytest tests/ &&
     node build.js --version`) no longer drops a real test run.
     """
-    if not _strippable(command):
+    if not _scan_bounded(command):
         return False
     return any(
         TEST_RUNNERS.search(clause) and not _NON_EXECUTING.search(clause)
-        for clause in re.split(r"&&|\|\||;|\|", _stripped(command))
+        for clause in _CLAUSE_SEP.split(_stripped(command))
     )
 
 #: Test-framework outcome markers, deliberately narrow (anchor calibration: compound
@@ -161,7 +171,13 @@ class Run:
     ref: str                       # tool_use id
     is_test_run: bool
 
+    @functools.cached_property
     def _summary_lines(self) -> list[str]:
+        # Cached per instance (the dataclass is unfrozen, so cached_property may write to
+        # __dict__): classify_outcome reads this several times (framework_failed/green/
+        # contradiction_span each re-scan), and the scan is splitlines + per-line regex over
+        # uncapped tool output. A Run's `output` never mutates after construction, so the cache
+        # can't go stale.
         return [line for line in self.output.splitlines() if _is_summary_line(line)]
 
     @staticmethod
@@ -187,7 +203,7 @@ class Run:
         cat'd CI log's stale FAILED line beside a green summary produced a false
         accusation. Conflicting summaries (a green summary line AND a
         separate failure-summary line) are ambiguous, never a failure marker."""
-        lines = self._summary_lines()
+        lines = self._summary_lines
         if lines:
             if self._summaries_conflict(lines):
                 return False
@@ -197,7 +213,7 @@ class Run:
     @property
     def framework_green(self) -> bool:
         """The test framework's own summary reported passes and no failures."""
-        lines = self._summary_lines()
+        lines = self._summary_lines
         if self._summaries_conflict(lines):
             return False  # conflicting summaries → ambiguous, not backed
         return any(_PASSED_COUNT.search(line) for line in lines) and not self.framework_failed
@@ -212,7 +228,7 @@ class Run:
         fail_span = next(
             (
                 m.group(0).strip()
-                for line in self._summary_lines()
+                for line in self._summary_lines
                 for m in [_FAILED_COUNT.search(line)]
                 if m
             ),
@@ -360,7 +376,7 @@ def classify_outcome(run: Run) -> tuple[str, str | None]:
     masked exit (`pytest || true`) beside a visible red summary endorsed a fake pass-claim.
     Never an accusation either way — D4 requires a non-zero exit.
     """
-    if run._summaries_conflict(run._summary_lines()):
+    if run._summaries_conflict(run._summary_lines):
         # Conflicting framework summaries (a green-only AND a separate failure-only line) are
         # untrustworthy in EITHER exit direction: framework_failed abstains to False on a
         # conflict, so without this a masked exit (`... || true`) would fall through to the
@@ -457,7 +473,7 @@ _GENERIC_TOKENS = frozenset({"test", "tests", "and", "or", "not"})
 
 def summary_passed_count(run: Run) -> int | None:
     """Passed-count read off the framework's own summary line only (never echoed output)."""
-    for line in run._summary_lines():
+    for line in run._summary_lines:
         m = _PASSED_N.search(line)
         if m:
             return int(m.group(1).replace(",", ""))
@@ -473,7 +489,7 @@ def runner_family(command: str) -> str | None:
 
 def _runner_clause(command: str) -> str:
     """The sub-command of a compound line that actually invokes the runner."""
-    for clause in re.split(r"&&|\|\||;|\|", command):
+    for clause in _CLAUSE_SEP.split(command):
         if TEST_RUNNERS.search(clause):
             return clause
     return command
@@ -487,6 +503,11 @@ def target_tokens(command: str) -> set[str]:
     neighbouring sub-commands are not test scopes. Heredoc bodies are stripped first,
     as in is_test_command — quoted file names in them are not scopes either.
     """
+    if not _scan_bounded(command):
+        # Gate the quadratic HEREDOC.sub/runner regexes like every other sink in this module:
+        # an un-strippable command is not evaluable as a witness, so it names no targets.
+        # Without this, an ungated caller re-opens the O(n^2) heredoc ReDoS.
+        return set()
     clause = _runner_clause(HEREDOC.sub(" ", command))
     m = TEST_RUNNERS.search(clause)
     args = clause[m.end():] if m else clause
@@ -560,7 +581,7 @@ def _tool_position_re(word: str) -> re.Pattern[str]:
 def runs_tool(command: str, word: str) -> bool:
     """True if `command` INVOKES `word` at a command position (directly, `python -m`, or
     an npm-style runner) — `pip install pytest` and `grep ruff …` do not run the tool."""
-    if not word or not _strippable(command):
+    if not word or not _scan_bounded(command):
         return False
     return bool(_tool_position_re(word.lower()).search(_stripped(command)))
 
@@ -583,7 +604,7 @@ def _binds_path(token: str, stripped: str) -> bool:
 def binds_command(tokens: list[str], command: str) -> bool:
     """True if any claim token binds to the command: path-ish tokens (with / or .) match as a
     whole path SEGMENT of the quote-stripped command; bare tool words must be invocations."""
-    if not _strippable(command):
+    if not _scan_bounded(command):
         return False
     stripped = _stripped(command)
     for t in tokens:

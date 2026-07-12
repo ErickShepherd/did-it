@@ -8,6 +8,8 @@ into the receipt table, so ANSI/bidi controls can visually rewrite it.
 
 from __future__ import annotations
 
+import os
+import threading
 import time
 from pathlib import Path
 
@@ -75,6 +77,27 @@ class TestTranscriptSizeCap:
         (r,) = did_it.check(p)
         assert r.verdict == Verdict.NOT_EVALUABLE
 
+    def test_fifo_transcript_is_parsefailure_not_a_hang(self, tmp_path):
+        # A FIFO reports st_size 0, so the byte cap can't catch it; read_text would BLOCK
+        # forever on a pipe with no writer — a hang escapes the fail-closed backstop. parse
+        # must reject a non-regular file up front. Run in a thread so a regressed (hanging)
+        # parse fails the test on timeout instead of wedging the suite.
+        fifo = tmp_path / "t.jsonl"
+        os.mkfifo(fifo)
+        result: dict = {}
+
+        def run():
+            try:
+                transcript.parse(fifo)
+            except BaseException as e:  # noqa: BLE001 - capture whatever parse raises
+                result["exc"] = e
+
+        t = threading.Thread(target=run, daemon=True)
+        t.start()
+        t.join(timeout=5)
+        assert not t.is_alive(), "parse() hung on a FIFO instead of failing closed"
+        assert isinstance(result.get("exc"), transcript.ParseFailure)
+
 
 class TestVersionParsingFailsClosed:
     """_version_tuple must fail closed to None (unsupported), never crash on a crafted version.
@@ -91,6 +114,15 @@ class TestVersionParsingFailsClosed:
 
     def test_valid_version_still_parses(self):
         assert transcript._version_tuple("2.1.204") == (2, 1, 204)
+
+    def test_non_semver_int_forms_return_none(self):
+        # int() accepts underscore digit-separators, leading '+'/'-', and surrounding
+        # whitespace — all laxer than semver. "2.1.2_07" -> int("2_07") == 207 would
+        # silently parse as a supported version; these must fail closed to None.
+        assert transcript._version_tuple("2.1.2_07") is None
+        assert transcript._version_tuple("2.1.+7") is None
+        assert transcript._version_tuple("2.1. 7") is None
+        assert transcript._version_tuple("2.1.-7") is None
 
     def test_crafted_version_record_is_unknownschema_not_a_crash(self, tmp_path):
         import json
@@ -235,6 +267,22 @@ class TestInternalErrorBackstop:
         p = tmp_path / "t.jsonl"
         p.write_text("{}\n")
         monkeypatch.setattr(did_it, "check", lambda *_a, **_k: 1 / 0)
+        assert hook.run_stop_hook({"transcript_path": str(p)}) == 0
+
+    def test_cli_render_crash_is_usage_error_not_accusation(self, tmp_path, capsys, monkeypatch):
+        # report.render handles untrusted transcript text; if it raises, the crash must not
+        # escape main() to CPython's default exit 1 (reserved for CONTRADICTED). Exit 2.
+        p = tmp_path / "t.jsonl"
+        p.write_text("{}\n")
+        monkeypatch.setattr(report, "render", lambda *_a, **_k: 1 / 0)
+        assert cli.main([str(p)]) == 2
+
+    def test_hook_render_crash_stays_advisory_returns_zero(self, tmp_path, capsys, monkeypatch):
+        # Sibling of the CLI case: report.render handles untrusted transcript text; a crash
+        # there must not escape run_stop_hook — the Stop hook ALWAYS returns 0, never blocks.
+        p = tmp_path / "t.jsonl"
+        p.write_text("{}\n")
+        monkeypatch.setattr(report, "render", lambda *_a, **_k: 1 / 0)
         assert hook.run_stop_hook({"transcript_path": str(p)}) == 0
 
 
@@ -559,6 +607,33 @@ class TestSidechainFlagIsStrictBoolean:
         session = transcript.parse(p)
         assert session.used_subagents is True
         assert session.records == []  # skipped
+
+
+class TestAbsentNoteContract:
+    """reconcile._absent supersedes the caller's UNSUPPORTED-context note on the subagent branch
+    with the fixed NOT_EVALUABLE sidechain string (an off-bar signal in eval/schema_sweep.py); on
+    the no-subagent branch the caller's note is carried through verbatim. Pins the intentional
+    discard so a future 'use the passed note' change can't silently break the eval signal."""
+
+    class _Claim:
+        text = "tests pass"
+        utterance_index = 0
+
+    class _Session:
+        def __init__(self, used):
+            self.used_subagents = used
+
+    def test_subagent_branch_uses_fixed_sidechain_note_not_the_caller_note(self):
+        from did_it import reconcile
+        r = reconcile._absent(self._Claim(), self._Session(True), "no valid test run at utterance-time")
+        assert r.verdict == Verdict.NOT_EVALUABLE
+        assert r.notes == ["evidence may be in an un-ingested sidechain (v1.1)"]
+
+    def test_no_subagent_branch_carries_the_caller_note_through(self):
+        from did_it import reconcile
+        r = reconcile._absent(self._Claim(), self._Session(False), "no valid test run at utterance-time")
+        assert r.verdict == Verdict.UNSUPPORTED
+        assert r.notes == ["no valid test run at utterance-time"]
 
 
 class TestBlockFilterSingleSource:

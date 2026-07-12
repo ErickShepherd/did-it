@@ -161,6 +161,20 @@ class TestExecutorAggregation:
         monkeypatch.setattr(verify.subprocess, "run", boom)
         assert verify.run_command("pytest -q", "/repo", runs=2).status == "errored"
 
+    def test_never_raises_covers_both_valueerror_sources(self, monkeypatch):
+        # Characterizes the two ValueError sources the except comment documents, both closed:
+        # (1) a NUL in argv is gated by _UNSAFE before ever reaching subprocess, so run_command
+        #     returns "skipped" (the except never fires for it), and
+        # (2) any ValueError that does reach the except (e.g. embedded null byte from an argv the
+        #     gate somehow admitted) is turned into "errored", never propagated.
+        assert not verify.is_verifiable_command("pytest\x00-q")
+        assert verify.run_command("pytest\x00-q", "/repo", runs=2).status == "skipped"
+
+        def boom(argv, **kw):
+            raise ValueError("embedded null byte")
+        monkeypatch.setattr(verify.subprocess, "run", boom)
+        assert verify.run_command("pytest -q", "/repo", runs=2).status == "errored"
+
     def test_bare_exit_zero_without_summary_is_not_green(self, monkeypatch):
         # A no-op `test` script (`npm test` -> `echo ok`) exits 0 with NO framework summary.
         # Re-execution must not endorse it as green — nothing actually ran, so no BACKED-verified
@@ -169,6 +183,17 @@ class TestExecutorAggregation:
         result = verify.run_command("npm test", "/repo", runs=2)
         assert result.status != "green"
         assert result.status == "errored"
+
+    def test_non_utf8_byte_does_not_drop_a_green_run(self, monkeypatch):
+        # A real runner can emit a non-UTF-8 byte alongside a genuine green summary (e.g. a
+        # progress glyph in a foreign locale). Strict decode raised UnicodeDecodeError (a
+        # ValueError) -> the green run was miscounted as `errored`, a false negative. With
+        # errors="replace" the summary survives and the run stays green.
+        monkeypatch.setattr(verify, "is_verifiable_command", lambda c: True)
+        prog = r"import sys; sys.stdout.buffer.write(b'3 passed in 0.01s\n\xff')"
+        cmd = f'{sys.executable} -c "{prog}"'
+        result = verify.run_command(cmd, ".", runs=1)
+        assert result.status == "green"
 
     def test_runs_with_shell_false_and_argv(self, monkeypatch):
         seen = {}
@@ -272,3 +297,29 @@ class TestRealExecution:
         r = verdict_of(did_it.check(b.write_jsonl(tmp_path / "t.jsonl"), verify_repo=str(tmp_path)),
                        "test passes")
         assert r.verdict == Verdict.BACKED_TRANSCRIPT   # never CONTRADICTED on a drifted re-run
+
+
+class TestModuleConstantOrganization:
+    """`_DEFAULT_RUNS`/`_DEFAULT_TIMEOUT` are module constants; they must sit with the other
+    module-level constants ABOVE the helper functions, not orphaned below `_escapes_repo`
+    (audit 2026-07-11: coding-standards/organization). Pins the source layout so a future edit
+    can't re-orphan them, and confirms both remain usable as `run_command` defaults."""
+
+    def test_default_constants_are_defined_above_the_helpers(self):
+        import inspect
+
+        src = inspect.getsource(verify)
+        i_runs = src.index("_DEFAULT_RUNS = ")
+        i_timeout = src.index("_DEFAULT_TIMEOUT = ")
+        i_flags = src.index("_FLAGS_WITH_VALUE = ")   # last of the constant block
+        i_helper = src.index("def _escapes_repo(")
+        # both constants sit within the constant block, before the first helper definition
+        assert i_flags < i_runs < i_helper
+        assert i_flags < i_timeout < i_helper
+
+    def test_defaults_still_wire_into_run_command(self):
+        import inspect
+
+        sig = inspect.signature(verify.run_command)
+        assert sig.parameters["runs"].default == verify._DEFAULT_RUNS == 2
+        assert sig.parameters["timeout"].default == verify._DEFAULT_TIMEOUT == 300.0
