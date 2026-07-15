@@ -5,6 +5,7 @@
 **Depends on:** [model-agnostic ingestion](model-agnostic-ingestion.md) and closure of
 the P1 findings in the
 [2026-07-15 adversarial review](../reviews/2026-07-15-adversarial-review.md).
+**Ralph execution:** [cross-runtime Ralph guide](../operations/ralph-cross-runtime.md).
 
 ## Outcome
 
