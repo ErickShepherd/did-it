@@ -5,6 +5,14 @@
 **One line:** a tool that mechanically checks whether an AI coding agent's natural-language claims match what its
 Claude Code session actually did — narrow, precision-first.
 
+> **Follow-up records (2026-07-15):** the
+> [adversarial correctness review](../reviews/2026-07-15-adversarial-review.md) documents eight
+> reproduced gaps outside the current corpus. The
+> [model- and runtime-agnostic ingestion proposal](model-agnostic-ingestion.md) concludes that
+> generalization is feasible through a neutral event IR and calibrated source adapters, after the
+> shared P1 correctness findings are closed. These are proposed follow-ups; they do not silently
+> widen v1's shipped scope or schema range.
+
 ## Context / problem
 Coding agents routinely *claim* work they didn't do ("tests pass", "fixed the bug"). Verifying this today is manual —
 METR reports it as "the majority of the work" in an eval run. No adopted OSS tool reconciles an agent's **prose claims**
