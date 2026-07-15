@@ -5,6 +5,8 @@
 **Prerequisite:** close the P1 findings in
 [`../reviews/2026-07-15-adversarial-review.md`](../reviews/2026-07-15-adversarial-review.md)
 before enabling accusations for any new source.
+**Execution plan:**
+[`cross-runtime-installation-plan.md`](cross-runtime-installation-plan.md).
 
 ## Executive answer
 
@@ -175,6 +177,20 @@ shortest path to true model/runtime independence and gives adapter authors a con
 The canonical format should not contain verdicts or preclassified outcomes. It records observations;
 `did-it` computes evidence tiers and verdicts so an input cannot forge trust.
 
+### GitHub Copilot hooks: feasible first external recorder
+
+GitHub documents session, prompt, pre-tool, post-tool, failure, stop, and error hooks that receive
+JSON input. This is a promising recorder surface because observation occurs at the host lifecycle
+boundary rather than through a model instruction.
+
+The native event corpus must still establish whether the supported Copilot environment exposes the
+visible final response, complete tool output, exit status, file changes, and stable call/result
+pairing. Begin as experimental with `accusation_ready=False`; unavailable facts remain explicit
+capability gaps rather than inferred defaults.
+
+Recommendation: select this as the first external recorder after canonical interchange, subject to
+an implementation spike confirming the minimum Session IR facts.
+
 ### OpenAI Agents SDK traces: feasible with an exporter profile
 
 The current Agents SDK traces generations, function calls, handoffs, guardrails, and custom events.
@@ -225,6 +241,10 @@ supply the claim's validated command; such a source cannot safely support transc
 
 ## Migration plan
 
+This section defines the core refactor sequence. Packaging, installer behavior, runtime rollout,
+support tiers, and release gates are specified in the
+[cross-runtime installation and distribution plan](cross-runtime-installation-plan.md).
+
 ### Phase 0 — repair shared correctness
 
 Close REV-1 through REV-8 and extend the evaluation with false-endorsement precision. Generalizing
@@ -249,9 +269,10 @@ before that point would multiply known false-verdict behavior across adapters.
 ### Phase 3 — one instrumented external runtime
 
 Use an SDK/runtime with structured lifecycle hooks, initially as experimental and
-`accusation_ready=False`. OpenAI Agents SDK plus a local custom trace processor is a plausible first
-candidate because the required span/export seams are documented. Promote only after the validation
-bar below passes.
+`accusation_ready=False`. The execution plan selects GitHub Copilot for the first recorder spike,
+followed by the OpenAI Agents SDK local trace processor. If Copilot's native events cannot provide the
+minimum Session IR facts, it remains parse-only or Tier B rather than delaying the canonical format.
+Promote any adapter only after the validation bar below passes.
 
 ### Phase 4 — optional telemetry and native adapters
 
@@ -293,6 +314,10 @@ An adapter is not accusation-ready merely because it parses fixtures.
 
 External interfaces are time-sensitive; these were checked on 2026-07-15:
 
+- [MCP architecture](https://modelcontextprotocol.io/docs/learn/architecture):
+  host/client/server roles and host-controlled context and tool exchange.
+- [GitHub Copilot hooks](https://docs.github.com/en/copilot/concepts/agents/hooks):
+  session and tool lifecycle hook events, JSON input, and audit/logging use.
 - [OpenAI Agents SDK tracing](https://openai.github.io/openai-agents-python/tracing/): traced
   generations/tool calls/handoffs, sensitive-content behavior, and custom processors.
 - [OpenAI Agents SDK tracing reference](https://openai.github.io/openai-agents-python/ref/tracing/):

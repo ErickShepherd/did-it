@@ -133,6 +133,7 @@ summaries, file operations.
 
 Design records: [`docs/design/did-it.md`](docs/design/did-it.md) ·
 [`model- and runtime-agnostic ingestion`](docs/design/model-agnostic-ingestion.md) ·
+[`cross-runtime installation plan`](docs/design/cross-runtime-installation-plan.md) ·
 [`2026-07-15 adversarial review`](docs/reviews/2026-07-15-adversarial-review.md).
 
 ## License
