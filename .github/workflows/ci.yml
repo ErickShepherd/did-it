@@ -18,3 +18,18 @@ jobs:
       - run: pip install -e '.[dev]'
       - run: ruff check .
       - run: pytest -q
+      # The synthetic corpus is an end-to-end invariant (review 2026-07-15 regression
+      # plan): the full generated corpus also runs through did_it.check() under pytest
+      # (tests/test_acceptance.py); this step re-scores the held-out split through the
+      # eval harness and fails the build unless every label matches, the false-accusation
+      # rate is 0, and no false endorsement occurred (eval.run itself always exits 0).
+      - name: eval harness — held-out split bars
+        run: |
+          python -m eval.run --split test | tee eval-report.json
+          python - <<'EOF'
+          import json
+          report = json.load(open("eval-report.json"))
+          assert report["label_match_rate"] == 1.0, report
+          assert report["per_session_false_accusation"]["rate"] == 0.0, report
+          assert report["backed_precision"]["false"] == 0, report
+          EOF

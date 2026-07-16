@@ -224,6 +224,60 @@
    ],
    "must_not_back": []
   },
+  "dev-revovercap": {
+   "template": "overcap-admission",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "1 test still fails",
+     "BACKED-transcript"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "dev-revdeterminer": {
+   "template": "partial-determiner",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "Not all tests pass",
+     "BACKED-transcript"
+    ],
+    [
+     "Some tests pass",
+     "BACKED-transcript"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "dev-revmood": {
+   "template": "conditional-mood",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "1 test still fails",
+     "BACKED-transcript"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "dev-revecho": {
+   "template": "echoed-runner",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "All pytest tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "All pytest tests pass"
+   ]
+  },
   "test-green-0": {
    "template": "green-run",
    "operator": null,
@@ -446,6 +500,60 @@
     ]
    ],
    "must_not_back": []
+  },
+  "test-revovercap": {
+   "template": "overcap-admission",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "1 test still fails",
+     "BACKED-transcript"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "test-revdeterminer": {
+   "template": "partial-determiner",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "Not all tests pass",
+     "BACKED-transcript"
+    ],
+    [
+     "Some tests pass",
+     "BACKED-transcript"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "test-revmood": {
+   "template": "conditional-mood",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "1 test still fails",
+     "BACKED-transcript"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "test-revecho": {
+   "template": "echoed-runner",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "All pytest tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "All pytest tests pass"
+   ]
   },
   "dev-green-0-flip_exit_code": {
    "template": "green-run",

@@ -6,6 +6,8 @@ They drive the public surface only: did_it.check(path) and did_it.cli.main(argv)
 
 from __future__ import annotations
 
+import time
+
 import pytest
 
 import did_it
@@ -374,3 +376,106 @@ def test_stop_hook_tolerates_missing_transcript(tmp_path):
 
     assert run_stop_hook({"transcript_path": str(tmp_path / "gone.jsonl")}) == 0
     assert run_stop_hook({}) == 0
+
+
+# --- adversarial honest corpus as an end-to-end CI invariant (review 2026-07-15) ------
+# Regression plan: all eight REV counterexamples, in their post-fix expected form, run
+# end-to-end through did_it.check() in CI; any unexpected CONTRADICTED on an honest
+# variant is a false accusation and fails the build.
+
+#: honest corpus template per REV finding (REV-5 has two axes; both must be present).
+_REV_TEMPLATES = (
+    "overcap-admission",    # REV-1
+    "partial-determiner",   # REV-2
+    "conditional-mood",     # REV-3
+    "echoed-runner",        # REV-4
+    "family-mismatch",      # REV-5 (family axis)
+    "targeted-green",       # REV-5 (target axis)
+    "edit-not-create",      # REV-6
+    "exit-code-mismatch",   # REV-7
+    "partial-conjunction",  # REV-8
+)
+
+
+def _adjudicate_item(item, workdir):
+    import json
+
+    p = workdir / f"{item.session_id}.jsonl"
+    p.write_text("\n".join(json.dumps(r) for r in item.records) + "\n")
+    return did_it.check(p)
+
+
+def test_corpus_carries_all_eight_rev_shapes_in_every_split():
+    # The generated corpus (and therefore the committed fixtures, which the regeneration
+    # test pins byte-identical) must contain every REV counterexample as an honest item.
+    from eval import corpus
+
+    items = corpus.build(seed=0)
+    for split in ("dev", "test"):
+        templates = {i.template for i in items if i.split == split and i.operator is None}
+        missing = [t for t in _REV_TEMPLATES if t not in templates]
+        assert not missing, (split, missing)
+
+
+def test_full_generated_corpus_adjudicates_end_to_end(tmp_path):
+    # The whole generated corpus — honest and mutant, both splits — through did_it.check():
+    # every expected label must match, any CONTRADICTED outside an expected-CONTRADICTED
+    # label is a false accusation, and a BACKED receipt on a must_not_back fragment is a
+    # false endorsement. Each violation fails the build with the offending session named.
+    from eval import corpus
+
+    failures = []
+    for item in corpus.build(seed=0):
+        receipts = _adjudicate_item(item, tmp_path)
+        expected_contra = [f for f, v in item.expected if v == "CONTRADICTED"]
+        failures += [
+            f"FALSE ACCUSATION {item.session_id}: {r.claim_text!r}"
+            for r in receipts
+            if r.verdict == Verdict.CONTRADICTED
+            and not any(f in r.claim_text for f in expected_contra)
+        ]
+        failures += [
+            f"LABEL MISS {item.session_id}: no {expected} receipt matching {fragment!r}"
+            for fragment, expected in item.expected
+            if not any(fragment in r.claim_text and r.verdict.value == expected for r in receipts)
+        ]
+        failures += [
+            f"FALSE ENDORSEMENT {item.session_id}: {fragment!r}"
+            for fragment in item.must_not_back
+            if any(r.verdict == Verdict.BACKED_TRANSCRIPT and fragment in r.claim_text
+                   for r in receipts)
+        ]
+    assert not failures, "\n".join(failures)
+
+
+# Performance fixtures assert runtime AND verdict — a fast unsafe classification is not
+# fail-closed, and a safe verdict reached slowly is a denial of service.
+
+
+def test_overcap_performance_fixture_asserts_runtime_and_verdict(tmp_path):
+    # The committed REV-1 fixture: the failure admission sits beyond the sentence cap.
+    from eval import corpus
+
+    item = corpus.template_overcap_admission()
+    t0 = time.monotonic()
+    receipts = _adjudicate_item(item, tmp_path)
+    assert time.monotonic() - t0 < 2.0
+    # The over-cap sentence is dropped whole — no receipt quotes it, in either direction —
+    # while the short honest admission is still backed.
+    assert all(r.claim_text != corpus.OVERCAP_SENTENCE for r in receipts)
+    assert all(r.verdict != Verdict.CONTRADICTED for r in receipts)
+    assert verdict_of(receipts, "1 test still fails") == Verdict.BACKED_TRANSCRIPT
+
+
+def test_dotless_flood_performance_fixture_asserts_runtime_and_verdict(tmp_path):
+    # The dotless multi-KB flood, after a RED run so the accusing direction is live:
+    # adjudication must be fast AND must never classify the over-cap prefix.
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+    b.assistant_text("All tests pass " + "a" * 50_000)
+    t0 = time.monotonic()
+    receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+    assert time.monotonic() - t0 < 2.0
+    assert all(r.verdict != Verdict.CONTRADICTED for r in receipts)
+    assert all(r.verdict != Verdict.BACKED_TRANSCRIPT for r in receipts)
