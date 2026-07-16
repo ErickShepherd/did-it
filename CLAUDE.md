@@ -4,6 +4,11 @@ Read this file before changing the repository.
 
 ## Current planning records
 
+- [`docs/reviews/2026-07-16-post-ralph-inspection.md`](docs/reviews/2026-07-16-post-ralph-inspection.md)
+  is the current acceptance state. It records four open findings discovered after the L0 Ralph
+  loop; treat the prior sign-off as invalidated until they are independently reviewed.
+- [`docs/operations/claude-review-post-ralph-2026-07-16.md`](docs/operations/claude-review-post-ralph-2026-07-16.md)
+  is the review-only prompt for a fresh Claude Opus 4.6 process to falsify those findings.
 - [`docs/reviews/2026-07-15-adversarial-review.md`](docs/reviews/2026-07-15-adversarial-review.md)
   contains eight reproduced correctness findings, REV-1 through REV-8.
 - [`docs/design/model-agnostic-ingestion.md`](docs/design/model-agnostic-ingestion.md) defines the
