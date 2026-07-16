@@ -537,6 +537,103 @@ class TestGreenScopeSymmetry:
         assert verdict_of(receipts, "tests pass") == Verdict.BACKED_TRANSCRIPT
 
 
+class TestCompoundExecutionClaims:
+    """REV-8: `_command_ran` binds existentially over the sentence's tokens, so a conjunction
+    ("I ran pytest and ruff.") was endorsed WHOLESALE after only one component ran. Compound
+    execution claims now split into one claim per coordinated command (the review's preferred
+    remediation), so partial execution yields per-command receipts — never a whole-conjunction
+    endorsement. command-ran never accuses, so every miss here abstains (endorsement
+    precision, not the accusation axis)."""
+
+    @staticmethod
+    def receipts_for(receipts, fragment):
+        return [r for r in receipts if fragment in r.claim_text]
+
+    def test_partial_execution_is_not_endorsed_wholesale(self, tmp_path):
+        # The REV-8 counterexample: only pytest ran; the ruff conjunct earns no endorsement.
+        b = SessionBuilder()
+        b.user_text("run the checks")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("I ran pytest and ruff.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        rs = self.receipts_for(receipts, "pytest and ruff")
+        assert [r.verdict for r in rs] == [Verdict.BACKED_TRANSCRIPT, Verdict.UNSUPPORTED]
+        # the abstaining receipt names the command that never ran (a useful per-command receipt)
+        assert any("ruff" in n for n in rs[1].notes)
+
+    def test_full_execution_earns_a_receipt_per_command(self, tmp_path):
+        # Control: when every conjunct ran, each earns its own endorsement.
+        b = SessionBuilder()
+        b.user_text("run the checks")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.bash("ruff check .", "All checks passed!")
+        b.assistant_text("I ran pytest and ruff.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        rs = self.receipts_for(receipts, "pytest and ruff")
+        assert [r.verdict for r in rs] == [Verdict.BACKED_TRANSCRIPT, Verdict.BACKED_TRANSCRIPT]
+
+    def test_failed_conjunct_is_reported_per_command(self, tmp_path):
+        # Partial FAILURE is also per-command: the failed conjunct abstains with its exit code.
+        b = SessionBuilder()
+        b.user_text("run the checks")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.bash("ruff check .", "Found 3 errors.", exit_code=1)
+        b.assistant_text("I ran pytest and ruff.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        rs = self.receipts_for(receipts, "pytest and ruff")
+        assert [r.verdict for r in rs] == [Verdict.BACKED_TRANSCRIPT, Verdict.UNSUPPORTED]
+        assert any("exited 1" in n for n in rs[1].notes)
+
+    def test_comma_list_splits_every_conjunct(self, tmp_path):
+        # A comma-coordinated list is a conjunction too; only ruff actually ran.
+        b = SessionBuilder()
+        b.user_text("run the checks")
+        b.bash("ruff check .", "All checks passed!")
+        b.assistant_text("Ran pytest, ruff, and mypy.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        rs = self.receipts_for(receipts, "Ran pytest, ruff, and mypy")
+        assert [r.verdict for r in rs] == [
+            Verdict.UNSUPPORTED, Verdict.BACKED_TRANSCRIPT, Verdict.UNSUPPORTED,
+        ]
+
+    def test_single_command_with_arguments_is_not_split(self, tmp_path):
+        # A non-connective gap ("on") keeps the tokens in ONE conjunct: this sentence
+        # describes a single command, so it earns exactly one receipt.
+        b = SessionBuilder()
+        b.user_text("run the repro")
+        b.bash("pytest tests/test_foo.py -q", "3 passed in 0.05s")
+        b.assistant_text("Ran pytest on tests/test_foo.py to confirm.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        rs = self.receipts_for(receipts, "Ran pytest on")
+        assert [r.verdict for r in rs] == [Verdict.BACKED_TRANSCRIPT]
+
+    def test_split_helper_contract(self):
+        # Boundary contract of the splitter itself (per LOOP_LEARNINGS 2026-07-11: test the
+        # boundary function's own contract, not only check()'s end-to-end verdict).
+        from did_it import extraction
+
+        c = extraction._classify("I ran pytest and ruff.")
+        parts = extraction._split_compound(c)
+        assert [p.tokens for p in parts] == [["pytest"], ["ruff"]]
+        assert all(p.kind == "command-ran" and p.text == c.text for p in parts)
+
+        c2 = extraction._classify("Ran pytest, then ruff.")
+        assert [p.tokens for p in extraction._split_compound(c2)] == [["pytest"], ["ruff"]]
+
+        # a single command with its argument is one conjunct — never split
+        c3 = extraction._classify("Ran pytest on tests/test_foo.py.")
+        assert extraction._split_compound(c3) == [c3]
+
+    def test_split_only_applies_to_command_ran(self):
+        # file-created relies on tokens[0] being the claimed path; splitting any other
+        # kind would corrupt its binding. The splitter is kind-gated.
+        from did_it import extraction
+
+        c = extraction._classify("Created config.py and helper.py")
+        assert c is not None and c.kind == "file-created"
+        assert extraction._split_compound(c) == [c]
+
+
 class TestNarrationCoOccurrence:
     def test_checkable_claim_inside_workflow_narration_is_adjudicated(self, tmp_path):
         # 'worktree' vocabulary silently dropped a co-occurring pass-claim.

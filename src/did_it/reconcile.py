@@ -128,6 +128,11 @@ def _command_ran(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
             # it ran and FAILED: never an endorsement, never an accusation
             return _receipt(claim, Verdict.UNSUPPORTED, e,
                             note=f"matching command exited {run.exit_code}")
+    if tokens:
+        # REV-8: name the unmatched command so a split conjunct's receipt says WHICH
+        # command never ran (per-command receipts). The tokenless wording below is the
+        # documented note (README example) and stays verbatim.
+        return _absent(claim, session, f"no run matching '{', '.join(tokens)}' at utterance-time")
     return _absent(claim, session, "no matching command at utterance-time")
 
 

@@ -18,7 +18,7 @@ end-to-end. All patterns are published here, in one place, on purpose.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 
 @dataclass
@@ -321,6 +321,52 @@ def _proc_negated(sentence: str, verb_start: int) -> bool:
     return bool(PROC_NEG.search(window))
 
 
+#: Coordination glue between two binding tokens of a command-ran claim (REV-8). A gap made
+#: ONLY of these words (plus whitespace/commas) means the tokens name INDEPENDENT commands
+#: ("pytest and ruff", "pytest, then ruff"); any other word keeps them in one conjunct — the
+#: sentence describes a single command and its arguments ("pytest on tests/test_foo.py").
+#: `or` is deliberately absent: a disjunction is existential by its own semantics, so the
+#: pre-split any-token binding is the correct reading and it stays one claim. Checked with a
+#: word-set scan, not a regex — an alternation like `(?:[\s,]+|and)+` backtracks
+#: exponentially on the untrusted gap text.
+_CONJ_WORDS = frozenset({"and", "then", "plus", "also", "as", "well", "&", "&&"})
+
+
+def _connective_gap(gap: str) -> bool:
+    words = gap.replace(",", " ").split()
+    return all(w.lower() in _CONJ_WORDS for w in words)
+
+
+def _split_compound(claim: Claim) -> list[Claim]:
+    """One claim per coordinated command of a compound execution claim (REV-8).
+
+    `_command_ran` binds existentially over the claim's tokens, so left whole, "I ran pytest
+    and ruff." was endorsed after only pytest ran. Splitting is the review's preferred
+    remediation: each conjunct claim carries only its own binding tokens, so reconciliation
+    yields a per-command receipt (ran / failed / never ran) and a partial execution can never
+    endorse the whole conjunction. Only `command-ran` splits — every other kind's handler
+    reads `tokens[0]` positionally (file-created's path, check-pass's tool word). Grouping is
+    conservative: a non-connective gap joins its tokens into one conjunct, so an existential
+    residue survives inside a group ("ruff and the migration script scripts/migrate.py"
+    groups ruff with the path) — an endorsement-precision limit, never an accusation risk.
+    The claim text stays the verbatim sentence on every part (receipts must quote the
+    transcript, not fabricated per-conjunct prose); parts differ by their tokens.
+    """
+    if claim.kind != "command-ran" or len(claim.tokens) < 2:
+        return [claim]
+    spans = [m.span() for m in BIND_TOKEN.finditer(claim.text)]
+    groups: list[list[str]] = [[claim.tokens[0]]]
+    for i in range(1, len(spans)):
+        gap = claim.text[spans[i - 1][1]: spans[i][0]]
+        if _connective_gap(gap):
+            groups.append([claim.tokens[i]])
+        else:
+            groups[-1].append(claim.tokens[i])
+    if len(groups) < 2:
+        return [claim]
+    return [replace(claim, tokens=g) for g in groups]
+
+
 def _classify(sentence: str) -> Claim | None:
     """Classify one clean prose sentence; None if it makes no claim at all."""
     c = Claim(text=sentence, utterance_index=-1)
@@ -494,5 +540,8 @@ def extract_claims(session) -> list[Claim]:  # noqa: ANN001  (Session; avoid imp
                     continue
                 claim.utterance_index = idx
                 claim.is_assertive = True
-                claims.append(claim)
+                # REV-8: a compound execution claim splits into one claim per coordinated
+                # command, so partial execution yields per-command receipts, never a
+                # whole-conjunction endorsement.
+                claims.extend(_split_compound(claim))
     return claims
