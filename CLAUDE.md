@@ -5,25 +5,25 @@ Read this file before changing the repository.
 ## Current planning records
 
 - [`docs/reviews/2026-07-16-independent-falsification-assessment.md`](docs/reviews/2026-07-16-independent-falsification-assessment.md)
-  accepts the technical BLOCK while recording that the Fable 5 review did not satisfy the requested
-  Opus 4.6/no-write procedure; it recommends restoring local `main` and preserving the work on a
-  remediation branch, subject to an explicit owner decision.
+  accepts the technical BLOCK while recording that the launcher substituted Fable 5 for the
+  requested Opus 4.6. A later owner-instructed turn persisted the record using the reviewing
+  session rather than a separate recorder. It recommends restoring local `main` for governance,
+  not code-safety, subject to an explicit owner decision.
 - [`docs/operations/l05-ledger-2026-07-16.md`](docs/operations/l05-ledger-2026-07-16.md) is the
   draft owner-scoped remediation charter for PIR-1/PIR-3/PIR-4 and ADJ-A/B/D/E/F. It is not
-  executable until every pre-loop gate is checked by an out-of-loop owner/calibrator.
+  executable until every pre-loop decision and gate is checked by an out-of-loop owner/calibrator.
 - [`docs/reviews/2026-07-16-l05-charter-critique.md`](docs/reviews/2026-07-16-l05-charter-critique.md)
-  is a same-session critique of that charter and the assessment (satisfies no gate):
-  CHARTER NEEDS REVISION — three blocking, bounded defects (PRE-3 pin authorization too narrow;
-  L05-02 red-before destroyed by L05-01; four underdetermined DECIDE semantics) plus PRE-2
-  containment additions and two record-accuracy corrections. Revise before any pre-loop gate is
-  checked.
+  is a same-session critique of charter v1 and the assessment (satisfies no gate). Charter v2
+  incorporates its bounded test-authorization, ordering, containment, and record-accuracy findings;
+  every owner decision and pre-loop gate remains unchecked.
 - [`docs/reviews/2026-07-16-post-ralph-inspection.md`](docs/reviews/2026-07-16-post-ralph-inspection.md)
   is the current acceptance state. It records four open findings discovered after the L0 Ralph
   loop; treat the prior sign-off as invalidated until they are independently reviewed.
 - [`docs/reviews/2026-07-16-independent-falsification.md`](docs/reviews/2026-07-16-independent-falsification.md)
   technically corroborates all four PIR findings (disposition BLOCK), with adjacent counterexamples
-  ADJ-A/B/D/E/F. It used Fable 5 rather than the requested Opus 4.6 and committed documentation
-  despite a no-write review boundary, so it does not close the independent-review gate.
+  ADJ-A/B/D/E/F. The launcher used Fable 5 rather than the requested Opus 4.6; the review response
+  itself was read-only, then the same session persisted it on the owner's subsequent instruction.
+  The model substitution and lack of a separate recorder leave the independent-review gate open.
 - [`docs/operations/claude-review-post-ralph-2026-07-16.md`](docs/operations/claude-review-post-ralph-2026-07-16.md)
   is the review-only prompt for a fresh Claude Opus 4.6 process to falsify those findings.
 - [`docs/reviews/2026-07-15-adversarial-review.md`](docs/reviews/2026-07-15-adversarial-review.md)
