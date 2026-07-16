@@ -10,8 +10,13 @@ Read this file before changing the repository.
   session rather than a separate recorder. It recommends restoring local `main` for governance,
   not code-safety, subject to an explicit owner decision.
 - [`docs/operations/l05-ledger-2026-07-16.md`](docs/operations/l05-ledger-2026-07-16.md) is the
-  draft owner-scoped remediation charter for PIR-1/PIR-3/PIR-4 and ADJ-A/B/D/E/F. It is not
-  executable until every pre-loop decision and gate is checked by an out-of-loop owner/calibrator.
+  owner-ratified remediation charter for PIR-1/PIR-3/PIR-4 and ADJ-A/B/D/E/F (2026-07-16:
+  PRE-1 executed — local `main` restored to `06b73ee`, remediation branch
+  `remediate/l05-post-ralph-2026-07-16` cut at `d6d3dd3`; DECIDE-1..5 and PRE-3 recorded).
+  **PRE-2 is BLOCKED**: three harness guard gaps (`git branch -f` / `git update-ref` /
+  `git symbolic-ref` not denied — fix belongs in the external loop-guard harness) and the
+  driver does not exist yet. The loop is NOT authorized to launch; no merge, push, or branch
+  deletion is authorized.
 - [`docs/reviews/2026-07-16-l05-charter-critique.md`](docs/reviews/2026-07-16-l05-charter-critique.md)
   is a same-session critique of charter v1 and the assessment (satisfies no gate). Charter v2
   incorporates its bounded test-authorization, ordering, containment, and record-accuracy findings;
