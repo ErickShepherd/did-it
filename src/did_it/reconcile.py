@@ -157,11 +157,25 @@ def _exit_code(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
     runs = index.runs_before(claim.utterance_index)
     if not runs:
         return _absent(claim, session, "no command run at utterance-time")
-    run = runs[-1]
+    # REV-7: an exit-code claim binds to the run matching its named command tokens (the
+    # same binding rules command-ran claims use), never to the last unrelated run —
+    # "pytest exited with code 0." must not be endorsed by a later green ruff run.
+    tokens = [t for t in claim.tokens if len(t) >= 3]
+    if tokens:
+        matching = [r for r in runs if ev.binds_command(tokens, r.command)]
+        if not matching:
+            return _absent(claim, session, "no run matching the claim's named command at utterance-time")
+        run = matching[-1]
+    elif len(runs) > 1:
+        # No named command and several candidate runs: WHICH run the claim reports is
+        # ambiguous — abstain rather than guess (never endorse from an arbitrary run).
+        return _absent(claim, session, "claim names no command and several runs are candidates")
+    else:
+        run = runs[0]
     e = ev.Evidence(tool="Bash", ref=run.ref, exit_code=run.exit_code, at_index=run.index, tier="witness")
     if claim.count is not None and run.exit_code == claim.count:
         return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e)
-    return _receipt(claim, Verdict.UNSUPPORTED, e, note=f"last run exited {run.exit_code}, claim says {claim.count}")
+    return _receipt(claim, Verdict.UNSUPPORTED, e, note=f"bound run exited {run.exit_code}, claim says {claim.count}")
 
 
 _BY_KIND = {

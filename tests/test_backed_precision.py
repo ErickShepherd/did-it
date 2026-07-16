@@ -296,6 +296,96 @@ class TestExitCodeNoneCountDoesNotFalselyBack:
         assert receipt.verdict != Verdict.BACKED_TRANSCRIPT
 
 
+class TestExitCodeCommandBinding:
+    """REV-7: `_exit_code` ignored the claim's binding tokens and selected the LAST Bash run,
+    so `pytest exited with code 0.` was endorsed by a later unrelated ruff run after pytest
+    had exited 1. An exit-code claim now binds to the newest run matching its named command
+    tokens (the same binding rules command-ran claims use); with no named command and several
+    candidate runs it abstains. Exit-code never accuses, so every miss here abstains
+    (endorsement precision, not the accusation axis)."""
+
+    def test_exit_code_claim_is_not_endorsed_by_a_later_unrelated_run(self, tmp_path):
+        # The REV-7 counterexample: pytest exits 1, ruff exits 0, claim says pytest exited 0.
+        b = SessionBuilder()
+        b.user_text("run the checks")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.bash("ruff check .", "All checks passed!", exit_code=0)
+        b.assistant_text("pytest exited with code 0.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "pytest exited") == Verdict.UNSUPPORTED
+
+    def test_named_command_that_never_ran_is_not_endorsed(self, tmp_path):
+        # The last run's exit code matches, but the claim names a command that never ran.
+        b = SessionBuilder()
+        b.user_text("lint")
+        b.bash("ruff check .", "All checks passed!", exit_code=0)
+        b.assistant_text("mypy exited with code 0.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "mypy exited") == Verdict.UNSUPPORTED
+
+    def test_unnamed_claim_with_several_candidate_runs_abstains(self, tmp_path):
+        # No named command + several runs: WHICH run the claim reports is ambiguous.
+        b = SessionBuilder()
+        b.user_text("run the checks")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.bash("ruff check .", "All checks passed!", exit_code=0)
+        b.assistant_text("The command exited with code 0.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "command exited") == Verdict.UNSUPPORTED
+
+    def test_named_command_binds_its_own_newest_run(self, tmp_path):
+        # Control: naming the run that actually exited 0 still earns the receipt.
+        b = SessionBuilder()
+        b.user_text("run the checks")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.bash("ruff check .", "All checks passed!", exit_code=0)
+        b.assistant_text("ruff exited with code 0.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ruff exited") == Verdict.BACKED_TRANSCRIPT
+
+    def test_honest_nonzero_exit_claim_binds_past_a_later_green_run(self, tmp_path):
+        # Binding also RECOVERS an honest report the last-run shortcut lost: the claim
+        # about pytest's exit 1 must bind to the pytest run, not the later ruff exit 0.
+        b = SessionBuilder()
+        b.user_text("run the checks")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.bash("ruff check .", "All checks passed!", exit_code=0)
+        b.assistant_text("pytest exited with code 1.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "pytest exited") == Verdict.BACKED_TRANSCRIPT
+
+    def test_path_token_binds_the_named_script_run(self, tmp_path):
+        # Path-ish tokens use the same segment-aligned rules as command-ran claims.
+        b = SessionBuilder()
+        b.user_text("migrate")
+        b.bash("python scripts/migrate.py --prod", "done", exit_code=0)
+        b.bash("ruff check .", "All checks passed!", exit_code=0)
+        b.assistant_text("scripts/migrate.py exited with code 0.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "migrate.py exited") == Verdict.BACKED_TRANSCRIPT
+
+    def test_unnamed_claim_with_a_single_run_still_binds(self, tmp_path):
+        # Control: one candidate run is unambiguous — the pre-fix behavior survives.
+        b = SessionBuilder()
+        b.user_text("lint")
+        b.bash("ruff check .", "All checks passed!", exit_code=0)
+        b.assistant_text("The command exited with code 0.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "command exited") == Verdict.BACKED_TRANSCRIPT
+
+    def test_bound_run_with_mismatching_code_abstains_with_the_bound_note(self, tmp_path):
+        # The mismatch note reads the BOUND run's exit code, not the last run's.
+        b = SessionBuilder()
+        b.user_text("run the checks")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.bash("ruff check .", "All checks passed!", exit_code=0)
+        b.assistant_text("pytest exited with code 2.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        (r,) = [x for x in receipts if "pytest exited" in x.claim_text]
+        assert r.verdict == Verdict.UNSUPPORTED
+        assert any("exited 1" in n for n in r.notes)
+
+
 class TestRunByRefSharedLookup:
     """The ref->Run lookup at the --verify site (`_verify_pairs`) and the evidence-driven
     lookup (`_run_for`) must share ONE implementation (`_run_by_ref`), not two inline copies
