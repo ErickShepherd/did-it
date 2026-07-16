@@ -11,6 +11,12 @@ Read this file before changing the repository.
 - [`docs/operations/l05-ledger-2026-07-16.md`](docs/operations/l05-ledger-2026-07-16.md) is the
   draft owner-scoped remediation charter for PIR-1/PIR-3/PIR-4 and ADJ-A/B/D/E/F. It is not
   executable until every pre-loop gate is checked by an out-of-loop owner/calibrator.
+- [`docs/reviews/2026-07-16-l05-charter-critique.md`](docs/reviews/2026-07-16-l05-charter-critique.md)
+  is a same-session critique of that charter and the assessment (satisfies no gate):
+  CHARTER NEEDS REVISION — three blocking, bounded defects (PRE-3 pin authorization too narrow;
+  L05-02 red-before destroyed by L05-01; four underdetermined DECIDE semantics) plus PRE-2
+  containment additions and two record-accuracy corrections. Revise before any pre-loop gate is
+  checked.
 - [`docs/reviews/2026-07-16-post-ralph-inspection.md`](docs/reviews/2026-07-16-post-ralph-inspection.md)
   is the current acceptance state. It records four open findings discovered after the L0 Ralph
   loop; treat the prior sign-off as invalidated until they are independently reviewed.
