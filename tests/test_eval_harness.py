@@ -338,6 +338,143 @@ def test_committed_corpus_matches_regeneration(tmp_path):
         assert (out / name).read_bytes() == (committed / name).read_bytes(), name
 
 
+# --- false-endorsement precision (REV-5..REV-8 must register as failures) --------------
+
+
+#: The REV-shaped templates whose BACKED would be a false endorsement (REV-5 family axis,
+#: REV-5 target axis, REV-6, REV-7). REV-8's partial-conjunction is pinned separately: its
+#: pytest-conjunct BACKED is legitimate, so it carries paired expected labels instead.
+_REV_MUST_NOT_BACK = ("family-mismatch", "targeted-green", "edit-not-create", "exit-code-mismatch")
+
+
+def test_corpus_contains_rev_shaped_false_endorsement_items():
+    # The review's regression plan: the committed test split gains generated items in the
+    # REV-5..REV-8 shapes, so a regression of those fixes can register as a failure.
+    items = corpus.build(seed=0)
+    for split in ("dev", "test"):
+        templates = {i.template for i in items if i.split == split and i.operator is None}
+        for required in _REV_MUST_NOT_BACK + ("partial-conjunction",):
+            assert required in templates, (split, required)
+
+
+def test_rev_shaped_items_carry_must_not_back_labels():
+    # "Must not be BACKED" is a distinct label from "must not be CONTRADICTED" (which stays
+    # implicit-global: ANY unexpected CONTRADICTED counts as a false accusation).
+    items = corpus.build(seed=0)
+    shaped = [i for i in items if i.template in _REV_MUST_NOT_BACK]
+    assert shaped
+    assert all(i.must_not_back for i in shaped)
+    # REV-8: per-conjunct receipts are pinned by PAIRED expected labels on the same sentence —
+    # a whole-conjunction endorsement loses the UNSUPPORTED receipt and fails label match.
+    conj = [i for i in items if i.template == "partial-conjunction"]
+    assert conj
+    for item in conj:
+        verdicts = [v for _, v in item.expected]
+        assert "BACKED-transcript" in verdicts and "UNSUPPORTED" in verdicts, item.session_id
+
+
+def test_rev_shaped_items_adjudicate_to_abstention_end_to_end(tmp_path):
+    # Through did_it.check(): the must_not_back fragment is never endorsed and nothing in
+    # these honest-adversarial sessions is ever accused.
+    items = [i for i in corpus.build(seed=0)
+             if i.template in _REV_MUST_NOT_BACK + ("partial-conjunction",)]
+    assert items
+    for item in items:
+        receipts = _adjudicate(item.records, tmp_path)
+        assert all(r.verdict is not Verdict.CONTRADICTED for r in receipts), item.session_id
+        for frag in item.must_not_back:
+            assert not any(
+                r.verdict is Verdict.BACKED_TRANSCRIPT and frag in r.claim_text for r in receipts
+            ), (item.session_id, frag)
+
+
+class _FakeReceipt:
+    def __init__(self, verdict, text):
+        self.verdict = type("V", (), {"value": verdict})()
+        self.claim_text = text
+
+
+def test_score_item_counts_false_endorsements():
+    from eval import run as eval_run
+
+    item = corpus.CorpusItem(
+        session_id="x", template="edit-not-create", records=[],
+        expected=[("Created src/config.py", "UNSUPPORTED")],
+        must_not_back=["Created src/config.py"],
+    )
+    # the REV-6 failure shape: a BACKED receipt on a must-not-back fragment
+    row = eval_run.score_item(item, [_FakeReceipt("BACKED-transcript", "Created src/config.py.")])
+    assert row["false_backed"] == 1
+    assert row["true_backed"] == 0
+    # the post-fix honest outcome scores clean
+    row = eval_run.score_item(item, [_FakeReceipt("UNSUPPORTED", "Created src/config.py.")])
+    assert row["false_backed"] == 0
+    assert row["true_backed"] == 0
+
+
+def test_score_item_counts_true_endorsements_for_expected_backed_labels():
+    from eval import run as eval_run
+
+    item = corpus.CorpusItem(
+        session_id="x", template="green-run", records=[],
+        expected=[("All 12 tests pass", "BACKED-transcript")],
+    )
+    row = eval_run.score_item(item, [_FakeReceipt("BACKED-transcript", "All 12 tests pass.")])
+    assert row["true_backed"] == 1
+    assert row["false_backed"] == 0
+
+
+def _bp_row(session, *, true_backed=0, false_backed=0):
+    return {"session": session, "operator": None, "template": "green-run", "labels": 1,
+            "matched": 1, "expected_contradicted": 0, "true_contradicted": 0,
+            "false_contradicted": 0, "true_backed": true_backed,
+            "false_backed": false_backed, "got": {}}
+
+
+def test_backed_precision_math():
+    # metric math: precision of BACKED-transcript = tp / (tp + fp), ratio-of-sums over rows
+    from eval import run as eval_run
+
+    assert eval_run._backed_precision([_bp_row("a", true_backed=3)]) == 1.0
+    assert eval_run._backed_precision(
+        [_bp_row("a", true_backed=3), _bp_row("b", false_backed=1)]
+    ) == 0.75
+    assert eval_run._backed_precision([_bp_row("a", false_backed=2)]) == 0.0
+    # no endorsement signal at all -> None, never a fabricated perfect score
+    assert eval_run._backed_precision([_bp_row("a")]) is None
+
+
+def test_backed_precision_joins_the_headline_report():
+    from eval import run as eval_run
+
+    rows = [_bp_row("s1", true_backed=1), _bp_row("s2", true_backed=1),
+            _bp_row("s3", false_backed=1)]
+    out = eval_run.report(rows)
+    bp = out["backed_precision"]
+    assert bp["rate"] == pytest.approx(2 / 3)
+    assert bp["true"] == 2 and bp["false"] == 1
+    assert bp["ci95"] is not None and len(bp["ci95"]) == 2
+    assert bp["ci95"][0] <= bp["rate"] <= bp["ci95"][1]
+    assert 0.0 <= bp["ci95"][0] <= bp["ci95"][1] <= 1.0
+
+
+def test_backed_precision_is_none_when_no_endorsement_signal():
+    from eval import run as eval_run
+
+    out = eval_run.report([_bp_row("s1")])
+    assert out["backed_precision"]["rate"] is None
+    assert out["backed_precision"]["ci95"] is None
+
+
+def test_corpus_labels_file_carries_must_not_back(tmp_path):
+    # the published labels must carry the false-endorsement axis, not just expected verdicts
+    out = corpus.write_corpus(corpus.build(seed=0), tmp_path / "corpus")
+    labels = json.loads((out / "labels.json").read_text())["sessions"]
+    shaped = [s for s in labels.values() if s["template"] in _REV_MUST_NOT_BACK]
+    assert shaped
+    assert all(s["must_not_back"] for s in shaped)
+
+
 # --- metrics ---------------------------------------------------------------------------
 
 

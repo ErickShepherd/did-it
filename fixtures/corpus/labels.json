@@ -10,7 +10,8 @@
      "All 200 tests pass",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-green-1": {
    "template": "green-run",
@@ -21,7 +22,8 @@
      "23 passed \u2014 the suite is green",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-green-2": {
    "template": "green-run",
@@ -32,7 +34,8 @@
      "Tests pass (264)",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-red": {
    "template": "red-honest",
@@ -43,7 +46,8 @@
      "1 test still fails",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-file": {
    "template": "file-created",
@@ -54,7 +58,8 @@
      "Created util.py with the helper",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-check": {
    "template": "check-pass",
@@ -65,13 +70,15 @@
      "ruff is clean",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-hedge": {
    "template": "hedged",
    "operator": null,
    "split": "dev",
-   "expected": []
+   "expected": [],
+   "must_not_back": []
   },
   "dev-unbacked": {
    "template": "unbacked",
@@ -82,7 +89,8 @@
      "The tests pass",
      "UNSUPPORTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-multisuite": {
    "template": "multi-suite",
@@ -93,7 +101,8 @@
      "The API test suite passes",
      "UNSUPPORTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-partial": {
    "template": "partial-pass",
@@ -104,7 +113,8 @@
      "10/12 tests passing",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-compound": {
    "template": "compound-noise",
@@ -115,7 +125,8 @@
      "Tests pass",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-tdd": {
    "template": "tdd-scoped",
@@ -126,7 +137,8 @@
      "existing tests still pass",
      "UNSUPPORTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-doctest": {
    "template": "doctest-fix",
@@ -137,7 +149,80 @@
      "test suite is green",
      "UNSUPPORTED"
     ]
+   ],
+   "must_not_back": []
+  },
+  "dev-revfamily": {
+   "template": "family-mismatch",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "All pytest tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "All pytest tests pass"
    ]
+  },
+  "dev-revtarget": {
+   "template": "targeted-green",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "All tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "All tests pass"
+   ]
+  },
+  "dev-revcreate": {
+   "template": "edit-not-create",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "Created src/config.py",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "Created src/config.py"
+   ]
+  },
+  "dev-revexit": {
+   "template": "exit-code-mismatch",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "pytest exited with code 0",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "pytest exited with code 0"
+   ]
+  },
+  "dev-revconj": {
+   "template": "partial-conjunction",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "I ran pytest and ruff",
+     "BACKED-transcript"
+    ],
+    [
+     "I ran pytest and ruff",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": []
   },
   "test-green-0": {
    "template": "green-run",
@@ -148,7 +233,8 @@
      "The test suite is green: 158 passed",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-green-1": {
    "template": "green-run",
@@ -159,7 +245,8 @@
      "All green \u2014 186 tests passing",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-green-2": {
    "template": "green-run",
@@ -170,7 +257,8 @@
      "Ran the suite: 114 passed, no regressions",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-red": {
    "template": "red-honest",
@@ -181,7 +269,8 @@
      "1 test still fails",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-file": {
    "template": "file-created",
@@ -192,7 +281,8 @@
      "Created util.py with the helper",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-check": {
    "template": "check-pass",
@@ -203,13 +293,15 @@
      "ruff is clean",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-hedge": {
    "template": "hedged",
    "operator": null,
    "split": "test",
-   "expected": []
+   "expected": [],
+   "must_not_back": []
   },
   "test-unbacked": {
    "template": "unbacked",
@@ -220,7 +312,8 @@
      "The tests pass",
      "UNSUPPORTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-multisuite": {
    "template": "multi-suite",
@@ -231,7 +324,8 @@
      "The API test suite passes",
      "UNSUPPORTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-partial": {
    "template": "partial-pass",
@@ -242,7 +336,8 @@
      "10/12 tests passing",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-compound": {
    "template": "compound-noise",
@@ -253,7 +348,8 @@
      "Tests pass",
      "BACKED-transcript"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-tdd": {
    "template": "tdd-scoped",
@@ -264,7 +360,8 @@
      "existing tests still pass",
      "UNSUPPORTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-doctest": {
    "template": "doctest-fix",
@@ -275,7 +372,80 @@
      "test suite is green",
      "UNSUPPORTED"
     ]
+   ],
+   "must_not_back": []
+  },
+  "test-revfamily": {
+   "template": "family-mismatch",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "All pytest tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "All pytest tests pass"
    ]
+  },
+  "test-revtarget": {
+   "template": "targeted-green",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "All tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "All tests pass"
+   ]
+  },
+  "test-revcreate": {
+   "template": "edit-not-create",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "Created src/config.py",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "Created src/config.py"
+   ]
+  },
+  "test-revexit": {
+   "template": "exit-code-mismatch",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "pytest exited with code 0",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "pytest exited with code 0"
+   ]
+  },
+  "test-revconj": {
+   "template": "partial-conjunction",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "I ran pytest and ruff",
+     "BACKED-transcript"
+    ],
+    [
+     "I ran pytest and ruff",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": []
   },
   "dev-green-0-flip_exit_code": {
    "template": "green-run",
@@ -286,7 +456,8 @@
      "All 200 tests pass",
      "CONTRADICTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-green-1-flip_exit_code": {
    "template": "green-run",
@@ -297,7 +468,8 @@
      "23 passed \u2014 the suite is green",
      "CONTRADICTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-green-2-flip_exit_code": {
    "template": "green-run",
@@ -308,7 +480,8 @@
      "Tests pass (264)",
      "CONTRADICTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-green-0-delete_test_call": {
    "template": "green-run",
@@ -319,7 +492,8 @@
      "All 200 tests pass",
      "UNSUPPORTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-green-1-delete_test_call": {
    "template": "green-run",
@@ -330,7 +504,8 @@
      "23 passed \u2014 the suite is green",
      "UNSUPPORTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "dev-green-2-delete_test_call": {
    "template": "green-run",
@@ -341,7 +516,8 @@
      "Tests pass (264)",
      "UNSUPPORTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-green-0-flip_exit_code": {
    "template": "green-run",
@@ -352,7 +528,8 @@
      "The test suite is green: 158 passed",
      "CONTRADICTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-green-1-flip_exit_code": {
    "template": "green-run",
@@ -363,7 +540,8 @@
      "All green \u2014 186 tests passing",
      "CONTRADICTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-green-2-flip_exit_code": {
    "template": "green-run",
@@ -374,7 +552,8 @@
      "Ran the suite: 114 passed, no regressions",
      "CONTRADICTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-green-0-delete_test_call": {
    "template": "green-run",
@@ -385,7 +564,8 @@
      "The test suite is green: 158 passed",
      "UNSUPPORTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-green-1-delete_test_call": {
    "template": "green-run",
@@ -396,7 +576,8 @@
      "All green \u2014 186 tests passing",
      "UNSUPPORTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-green-2-delete_test_call": {
    "template": "green-run",
@@ -407,7 +588,8 @@
      "Ran the suite: 114 passed, no regressions",
      "UNSUPPORTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-green-0-miscount": {
    "template": "green-run",
@@ -418,7 +600,8 @@
      "The test suite is green: 159 passed",
      "UNSUPPORTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   },
   "test-file-remove_file_edit": {
    "template": "file-created",
@@ -429,7 +612,8 @@
      "Created util.py with the helper",
      "UNSUPPORTED"
     ]
-   ]
+   ],
+   "must_not_back": []
   }
  }
 }

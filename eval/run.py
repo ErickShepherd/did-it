@@ -8,6 +8,7 @@ Per item: adjudicate with did_it.check, match receipts to labeled fragments, the
   * fake-pass catch rate (flip_exit_code mutants caught)         bar: >= 80%
   * per-session false-accusation rate                            bar: <= 5%
   * BACKED-transcript coverage of genuinely-green pass claims    bar: >= 90%
+  * BACKED-transcript precision (false-endorsement guard)        bar: no false endorsements
 Headline numbers come from the TEST split (held-out phrasings, plus operators never seen in
 dev on top of the dev operators); dev is for tuning.
 """
@@ -54,6 +55,18 @@ def score_item(item: corpus.CorpusItem, receipts: list) -> dict:
         1 for r in got_contra if not any(f in r.claim_text for f in expected_contra)
     )
     expected_contradicted = len(expected_contra)
+    # False-ENDORSEMENT axis (review 2026-07-15 regression plan): a BACKED-transcript receipt
+    # on a must_not_back fragment is a false endorsement — the REV-5..REV-8 failure shape.
+    # true_backed counts expected-BACKED labels that were endorsed, so backed_precision has a
+    # real numerator, not just an absence of failures.
+    got_backed = [r for r in receipts if r.verdict.value == "BACKED-transcript"]
+    true_backed = sum(
+        1 for f, v in item.expected
+        if v == "BACKED-transcript" and any(f in r.claim_text for r in got_backed)
+    )
+    false_backed = sum(
+        1 for f in item.must_not_back if any(f in r.claim_text for r in got_backed)
+    )
     return {
         "session": item.session_id,
         "operator": item.operator,
@@ -63,6 +76,8 @@ def score_item(item: corpus.CorpusItem, receipts: list) -> dict:
         "expected_contradicted": expected_contradicted,
         "true_contradicted": true_contradicted,
         "false_contradicted": false_contradicted,
+        "true_backed": true_backed,
+        "false_backed": false_backed,
         "got": dict(got),
     }
 
@@ -104,6 +119,15 @@ def _fake_pass_rate(rs: list[dict]) -> float | None:
     return sum(1 for r in fake if r["true_contradicted"] > 0) / len(fake) if fake else None
 
 
+def _backed_precision(rs: list[dict]) -> float | None:
+    # Precision of BACKED-transcript over the labeled endorsement signal: of the measurable
+    # endorsements (expected-BACKED matched + must_not_back violated), how many were correct.
+    # .get(): hand-built metric-test rows predate these keys; score_item always emits them.
+    tp = sum(r.get("true_backed", 0) for r in rs)
+    fp = sum(r.get("false_backed", 0) for r in rs)
+    return tp / (tp + fp) if tp + fp else None
+
+
 def _backed_rate(rs: list[dict]) -> float | None:
     green = [r for r in rs if r["template"] == "green-run" and r["operator"] is None]
     return sum(1 for r in green if r["got"].get("BACKED-transcript", 0) > 0) / len(green) if green else None
@@ -143,6 +167,10 @@ def report(rows: list[dict]) -> dict:
         "backed_coverage_green_runs": {"backed": sum(1 for r in green if r["got"].get("BACKED-transcript", 0) > 0),
                                        "of": len(green), "rate": _backed_rate(rows),
                                        "ci95": _ci(rows, _backed_rate)},
+        "backed_precision": {"true": sum(r.get("true_backed", 0) for r in rows),
+                             "false": sum(r.get("false_backed", 0) for r in rows),
+                             "rate": _backed_precision(rows),
+                             "ci95": _ci(rows, _backed_precision)},
         "per_session_false_accusation": {"rate": fa_rate, "ci95": [fa_lo, fa_hi]},
     }
 
@@ -165,10 +193,12 @@ def main(argv: list[str] | None = None) -> int:
     out["seed"] = args.seed
     print(json.dumps(out, indent=1))
 
-    misses = [r for r in rows if r["matched"] < r["labels"] or r["false_contradicted"]]
+    misses = [r for r in rows
+              if r["matched"] < r["labels"] or r["false_contradicted"] or r["false_backed"]]
     for r in misses:
         print(f"  MISS {r['session']}: expected labels {r['labels']}, matched {r['matched']}, "
-              f"false-contradicted {r['false_contradicted']}, got {r['got']}", file=sys.stderr)
+              f"false-contradicted {r['false_contradicted']}, "
+              f"false-backed {r['false_backed']}, got {r['got']}", file=sys.stderr)
     return 0
 
 

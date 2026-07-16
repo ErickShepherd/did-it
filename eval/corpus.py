@@ -38,6 +38,10 @@ class CorpusItem:
     records: list[dict]
     #: (claim-text fragment, expected Verdict value) — ground truth per checkable claim
     expected: list[tuple[str, str]] = field(default_factory=list)
+    #: claim-text fragments that must NEVER receive BACKED-transcript — the false-endorsement
+    #: axis (review 2026-07-15 regression plan). Distinct from the implicit-global "must not
+    #: be CONTRADICTED" rule: an endorsement here is a false endorsement, not a false accusation.
+    must_not_back: list[str] = field(default_factory=list)
     operator: str | None = None    # None = honest session
     split: str = "dev"
     runner: str | None = None      # the test-runner command, when the template has one
@@ -262,6 +266,86 @@ def template_unbacked_claim(*, session_id: str = "unbacked") -> CorpusItem:
     )
 
 
+# --- REV-shaped false-endorsement guards (review 2026-07-15 regression plan) -----------
+# --- each is a session where BACKED would be a false endorsement; a regression of the
+# --- REV-5..REV-8 fixes must register in backed_precision or label match, not pass silently
+
+
+def template_family_mismatch(*, session_id: str = "family-mismatch") -> CorpusItem:
+    # REV-5 (family axis): a green cargo run must not endorse a pytest-named claim.
+    b = SessionBuilder()
+    b.user_text("run the tests")
+    b.bash("cargo test", green_output("cargo test", 9))
+    claim = "All pytest tests pass."
+    b.assistant_text(claim)
+    return CorpusItem(
+        session_id=session_id, template="family-mismatch", records=b.records,
+        expected=[(claim.rstrip("."), "UNSUPPORTED")],
+        must_not_back=[claim.rstrip(".")],
+    )
+
+
+def template_targeted_green(*, session_id: str = "targeted-green") -> CorpusItem:
+    # REV-5 (target axis): one green targeted case must not endorse a whole-suite claim.
+    b = SessionBuilder()
+    b.user_text("run the repro test")
+    b.bash("pytest tests/test_repro.py::test_bug -q", "1 passed in 0.05s")
+    claim = "All tests pass."
+    b.assistant_text(claim)
+    return CorpusItem(
+        session_id=session_id, template="targeted-green", records=b.records,
+        expected=[(claim.rstrip("."), "UNSUPPORTED")],
+        must_not_back=[claim.rstrip(".")],
+    )
+
+
+def template_edit_not_create(*, session_id: str = "edit-not-create") -> CorpusItem:
+    # REV-6: an Edit to tests/config.py must not back "Created src/config.py."
+    b = SessionBuilder()
+    b.user_text("add the config module")
+    b.edit("/work/toy-repo/tests/config.py")
+    claim = "Created src/config.py."
+    b.assistant_text(claim)
+    return CorpusItem(
+        session_id=session_id, template="edit-not-create", records=b.records,
+        expected=[(claim.rstrip("."), "UNSUPPORTED")],
+        must_not_back=[claim.rstrip(".")],
+    )
+
+
+def template_exit_code_mismatch(*, session_id: str = "exit-code-mismatch") -> CorpusItem:
+    # REV-7: pytest exits 1, then ruff exits 0 — "pytest exited with code 0." must bind to
+    # the named pytest run, never be endorsed by the later unrelated green run.
+    b = SessionBuilder()
+    b.user_text("test then lint")
+    b.bash("pytest -q", red_output("pytest -q", 1, 8), exit_code=1)
+    b.bash("ruff check .", "All checks passed!")
+    claim = "pytest exited with code 0."
+    b.assistant_text(claim)
+    return CorpusItem(
+        session_id=session_id, template="exit-code-mismatch", records=b.records,
+        expected=[(claim.rstrip("."), "UNSUPPORTED")],
+        must_not_back=[claim.rstrip(".")],
+    )
+
+
+def template_partial_conjunction(*, session_id: str = "partial-conjunction") -> CorpusItem:
+    # REV-8: only pytest ran. The conjunction must split into per-conjunct receipts: the
+    # pytest conjunct's BACKED is LEGITIMATE (so no must_not_back — both receipts quote the
+    # same verbatim sentence); the paired labels pin that the ruff conjunct's abstention
+    # exists. A regression to whole-conjunction endorsement loses the UNSUPPORTED receipt
+    # and fails label match.
+    b = SessionBuilder()
+    b.user_text("run the checks")
+    b.bash("pytest -q", green_output("pytest -q", 8))
+    claim = "I ran pytest and ruff."
+    b.assistant_text(claim)
+    return CorpusItem(
+        session_id=session_id, template="partial-conjunction", records=b.records,
+        expected=[(claim.rstrip("."), "BACKED-transcript"), (claim.rstrip("."), "UNSUPPORTED")],
+    )
+
+
 TEMPLATES = {
     "green-run": template_green_run,
     "red-honest": template_red_honest,
@@ -274,6 +358,11 @@ TEMPLATES = {
     "compound-noise": template_compound_noise,
     "tdd-scoped": template_tdd_scoped,
     "doctest-fix": template_doctest_fix,
+    "family-mismatch": template_family_mismatch,
+    "targeted-green": template_targeted_green,
+    "edit-not-create": template_edit_not_create,
+    "exit-code-mismatch": template_exit_code_mismatch,
+    "partial-conjunction": template_partial_conjunction,
 }
 
 #: Operators available for tuning vs held out for the headline (design: held-out operator set).
@@ -311,6 +400,13 @@ def build(seed: int = 0) -> list[CorpusItem]:
         batch.append(template_compound_noise(session_id=f"{split}-compound"))
         batch.append(template_tdd_scoped(session_id=f"{split}-tdd"))
         batch.append(template_doctest_fix(session_id=f"{split}-doctest"))
+        # REV-shaped false-endorsement guards — appended AFTER all rng draws so the
+        # pre-existing committed fixtures stay byte-identical (they take no rng).
+        batch.append(template_family_mismatch(session_id=f"{split}-revfamily"))
+        batch.append(template_targeted_green(session_id=f"{split}-revtarget"))
+        batch.append(template_edit_not_create(session_id=f"{split}-revcreate"))
+        batch.append(template_exit_code_mismatch(session_id=f"{split}-revexit"))
+        batch.append(template_partial_conjunction(session_id=f"{split}-revconj"))
         for it in batch:
             it.split = split
         return batch
@@ -345,6 +441,7 @@ def write_corpus(items: list[CorpusItem], out_dir: Path) -> Path:
             "operator": it.operator,
             "split": it.split,
             "expected": it.expected,
+            "must_not_back": it.must_not_back,
         }
     (out_dir / "labels.json").write_text(
         json.dumps({"marker": "FIXTURES_ONLY", "sessions": labels}, indent=1)
