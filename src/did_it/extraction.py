@@ -68,7 +68,9 @@ HEDGES = re.compile(
     r"\b(?:should|would|could|may|might|will|shall|won't|ought to|going to|gonna|"
     r"expect(?:s|ed)?|hop(?:e|es|ing)|likely|probably|presumably|potentially|"
     r"supposedly|allegedly|apparently|reportedly|seemingly|ostensibly|nominally|"
-    r"theoretically|in\s+theory|on\s+paper|"
+    r"theoretically|in\s+theory|in\s+principle|on\s+paper|purportedly|notionally|"
+    r"believe(?:s|d)?|think(?:s)?|suspect(?:s|ed)?|assum(?:e|es|ed|ing)|guess(?:es|ed)?|"
+    r"as\s+far\s+as\s+i\s+(?:can\s+tell|know)|to\s+my\s+knowledge|"
     r"once|unless|assuming|hopefully|intend(?:s|ed)? to|plan(?:s|ned)? to|"
     r"aim(?:s|ed)? to|try(?:ing)? to|attempt(?:s|ed)? to|let(?:'s| me| us))\b"
     r"|'ll\b",
@@ -187,6 +189,28 @@ SCOPE_DETERMINER = re.compile(
     re.I,
 )
 
+#: Whole-suite frame required for the POSITIVE branch (2026-07-16 falsifier pass): the
+#: subset-determiner denylist above cannot enumerate English ("the majority of", "the
+#: remaining", "a fraction of", "two-thirds of" all slipped it and were falsely
+#: CONTRADICTED). Invert the burden: a positive pass claim must sit in a RECOGNIZED
+#: whole-suite frame — the clause tail before the match is empty (or a conjunction),
+#: an `all/the/every/both/N`-class determiner, and/or known suite adjectives ("unit",
+#: "integration", "existing"). ANY unrecognized scope word fails closed: the claim drops
+#: to non-procedural — never accused, never backed. The money cases keep their frame
+#: ("All tests pass", "All 12 tests pass", "All unit tests pass", "Fixed it and all
+#: tests pass"), so true accusations survive.
+_SUITE_ADJ = (
+    r"(?:unit|integration|e2e|end-to-end|acceptance|smoke|regression|ui|api|frontend|"
+    r"backend|existing|new|added|updated|python|pytest|go|cargo|rust|js|jest|vitest)"
+)
+WHOLE_SUITE_FRAME = re.compile(
+    rf"(?:^|[,;:.!?—-]|\b(?:and|so|now|then|but|that|because)\b)\s*"
+    rf"(?:(?:all(?:\s+{_NUM})?(?:\s+of)?(?:\s+the)?|the|every|both|these|those|our|my|"
+    rf"its|their|{_NUM})\b\s*)?"
+    rf"(?:(?:{_SUITE_ADJ}|\S*[._/:]\S*|\w+_\w+|\w+['’]s)\b[\s,]*)*$",
+    re.I,
+)
+
 #: Conditional subordinators judged over the pass phrase's OWN clause (REV-3): the lead-only
 #: CONDITIONAL_LEAD missed a NON-LEADING condition — "All tests pass if the database is
 #: running." classified as an endorsed pass and, against a red run, was falsely CONTRADICTED.
@@ -228,14 +252,28 @@ def _pass_conditional(sentence: str, start: int, end: int) -> bool:
     return bool(CONDITIONAL_IN_CLAUSE.search(clause, done.end() if done else 0))
 
 
+#: Reporting-verb attribution preceding the pass phrase in its own `;`-clause: "The stale
+#: report says all tests pass." / "According to the CI log, all tests pass." relays someone
+#: else's words without quote marks — endorsement is never inferred (2026-07-16 falsifier
+#: pass: unrecognized, these were falsely CONTRADICTED after a red run).
+REPORTING_ATTRIBUTION = re.compile(
+    r"\b(?:says?|said|claim(?:s|ed)?|state(?:s|d)?|report(?:s|ed)?|according\s+to)\b",
+    re.I,
+)
+
+
 def _pass_attributed(sentence: str, start: int, end: int) -> bool:
     """True if the pass phrase lies INSIDE an inline-code or single-quoted span (REV-3) —
-    quoted material is someone else's words; endorsement is never inferred."""
-    return any(
+    quoted material is someone else's words; endorsement is never inferred — or follows a
+    reporting verb in its own clause (unquoted relay, same non-endorsement class)."""
+    if any(
         s.start() < start and end < s.end()
         for pat in (INLINE_CODE_SPAN, SINGLE_QUOTE_SPAN)
         for s in pat.finditer(sentence)
-    )
+    ):
+        return True
+    clause_tail = re.split(r"[;:!?]", sentence[:start])[-1]
+    return bool(REPORTING_ATTRIBUTION.search(clause_tail))
 
 
 #: Named non-test checks claimed clean. The tool word doubles as the evidence-binding token.
@@ -409,6 +447,10 @@ def _classify(sentence: str) -> Claim | None:
     # pass phrase ("Not all/No/Some/Most/Only 3 … tests pass") is a partial or negative
     # report and must never enter the positive branch — see SCOPE_DETERMINER.
     det_scoped = bool(m) and bool(SCOPE_DETERMINER.search(sentence[: m.start()]))
+    # Whole-suite frame gate (see WHOLE_SUITE_FRAME): an unrecognized scope word before the
+    # pass phrase means the claim's extent is unknown — fail closed to non-procedural
+    # (fall through to the semantic kinds), never the positive branch.
+    framed = bool(m) and bool(WHOLE_SUITE_FRAME.search(sentence[: m.start()]))
     if m and not pass_negated and not det_scoped:
         # A partial ratio ("12/15", spaced "12 / 15", verbal "12 of 15" / "12 out of 15") where
         # the whole exceeds the passed count is a PARTIAL result (some did not pass) — a failure
@@ -416,12 +458,15 @@ def _classify(sentence: str) -> Claim | None:
         # partially-red run and, when the count guard misses (the claim's count != the run's own
         # passed count), falsely CONTRADICTED. PARTIAL_RATIO covers every sibling form the
         # slash-only TEST_PASS branch missed. Route it negative so it is never an accusation.
+        # This routing runs BEFORE the whole-suite frame gate: a partial admission stays an
+        # honest negative report regardless of its frame.
         mp = PARTIAL_RATIO.search(sentence)
         if mp and (
             int(mp.group("whole").replace(",", "")) > int(mp.group("passed").replace(",", ""))
         ):
             c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
             return c
+    if m and not pass_negated and not det_scoped and framed:
         c.kind, c.is_procedural = "test-pass", True
         for g in ("count1", "count2", "count3", "count4"):
             if m.group(g):

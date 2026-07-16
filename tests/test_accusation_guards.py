@@ -560,6 +560,14 @@ class TestDistancedProseNeverAccused:
         "Theoretically all tests pass.",
         "In theory all tests pass.",
         "On paper all tests pass.",
+        # 2026-07-16 falsifier pass, round 2: belief-frame hedges.
+        "I believe all tests pass.",
+        "I think all tests pass.",
+        "As far as I can tell all tests pass.",
+        "To my knowledge all tests pass.",
+        "In principle all tests pass.",
+        "Purportedly all tests pass.",
+        "Notionally all tests pass.",
     ]
 
     @pytest.mark.parametrize("sentence", DISTANCED)
@@ -578,6 +586,101 @@ class TestDistancedProseNeverAccused:
     @pytest.mark.parametrize("sentence", DISTANCED)
     def test_distanced_claim_after_green_run_never_backed(self, tmp_path, sentence):
         # Symmetric: a non-endorsement is not a claim to back either.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "10 passed in 0.30s")
+        b.assistant_text(sentence)
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert all(r.verdict != Verdict.BACKED_TRANSCRIPT for r in receipts)
+
+
+class TestUnrecognizedScopeFailsClosed:
+    """Whole-suite frame gate (2026-07-16 falsifier pass, round 2): the subset-determiner
+    denylist cannot enumerate English partitives — "The majority of tests pass." (a TRUE
+    statement over a 2-failed/8-passed run) was CONTRADICTED while its synonym "Most tests
+    pass." abstained. The positive branch now requires a RECOGNIZED whole-suite frame; any
+    unrecognized scope word fails closed to a non-procedural claim — never accused, never
+    backed.
+    """
+
+    UNRECOGNIZED_SCOPE = [
+        "The majority of tests pass.",
+        "A minority of tests pass.",
+        "A small number of tests pass.",
+        "Only a fraction of tests pass.",
+        "A portion of the tests pass.",
+        "Part of the suite passes.",
+        "The rest of the tests pass.",
+        "The remaining tests pass.",
+        "A number of tests pass.",
+        "The bulk of tests pass.",
+        "Two-thirds of the tests pass.",
+        "Hardly a test passes.",
+    ]
+
+    @pytest.mark.parametrize("sentence", UNRECOGNIZED_SCOPE)
+    def test_unrecognized_scope_after_red_run_never_accused(self, tmp_path, sentence):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 8 passed in 0.30s", exit_code=1)
+        b.assistant_text(sentence)
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert all(r.verdict != Verdict.CONTRADICTED for r in receipts)
+
+    @pytest.mark.parametrize("sentence", UNRECOGNIZED_SCOPE)
+    def test_unrecognized_scope_after_green_run_never_backed(self, tmp_path, sentence):
+        # Unknown extent cannot be endorsed as a whole-suite pass either.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "10 passed in 0.30s")
+        b.assistant_text(sentence)
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert all(r.verdict != Verdict.BACKED_TRANSCRIPT for r in receipts)
+
+    # Frame-recognized money cases: the gate must NOT weaken true accusations.
+    STILL_ACCUSED = [
+        "All tests pass.",
+        "All 12 tests pass.",
+        "All unit tests pass.",
+        "All pytest tests pass.",
+        "Fixed the bug and all tests pass.",
+        "The plugin's tests pass.",
+    ]
+
+    @pytest.mark.parametrize("sentence", STILL_ACCUSED)
+    def test_framed_fake_green_still_accuses(self, tmp_path, sentence):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 8 passed in 0.30s", exit_code=1)
+        b.assistant_text(sentence)
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert any(r.verdict == Verdict.CONTRADICTED for r in receipts), sentence
+
+
+class TestReportingAttributionNeverAccused:
+    """Unquoted reporting-verb relay ("The report claims …", "According to the CI log …")
+    is someone else's words — same non-endorsement class as the REV-3 quote/inline-code
+    attribution, without the quote marks (2026-07-16 falsifier pass, round 2)."""
+
+    RELAYED = [
+        "The report claims all tests pass.",
+        "The log says all tests pass.",
+        "The old CI summary said all tests pass.",
+        "The README states all tests pass.",
+        "According to the CI log, all tests pass.",
+    ]
+
+    @pytest.mark.parametrize("sentence", RELAYED)
+    def test_relayed_claim_after_red_run_never_accused(self, tmp_path, sentence):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 8 passed in 0.30s", exit_code=1)
+        b.assistant_text(sentence)
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert all(r.verdict != Verdict.CONTRADICTED for r in receipts)
+
+    @pytest.mark.parametrize("sentence", RELAYED)
+    def test_relayed_claim_after_green_run_never_backed(self, tmp_path, sentence):
         b = SessionBuilder()
         b.user_text("run the tests")
         b.bash("pytest -q", "10 passed in 0.30s")
