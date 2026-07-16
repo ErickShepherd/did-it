@@ -7,6 +7,11 @@ Read this file before changing the repository.
 - [`docs/reviews/2026-07-16-post-ralph-inspection.md`](docs/reviews/2026-07-16-post-ralph-inspection.md)
   is the current acceptance state. It records four open findings discovered after the L0 Ralph
   loop; treat the prior sign-off as invalidated until they are independently reviewed.
+- [`docs/reviews/2026-07-16-independent-falsification.md`](docs/reviews/2026-07-16-independent-falsification.md)
+  is that independent review: all four PIR findings survived falsification (disposition BLOCK),
+  with new adjacent counterexamples ADJ-A/B/D/E/F and a recommended remediation boundary.
+  Remediation requires a freshly chartered owner-scoped branch (two existing tests pin PIR-1/PIR-4
+  behavior and must change out-of-loop).
 - [`docs/operations/claude-review-post-ralph-2026-07-16.md`](docs/operations/claude-review-post-ralph-2026-07-16.md)
   is the review-only prompt for a fresh Claude Opus 4.6 process to falsify those findings.
 - [`docs/reviews/2026-07-15-adversarial-review.md`](docs/reviews/2026-07-15-adversarial-review.md)
