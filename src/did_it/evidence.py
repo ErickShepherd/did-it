@@ -429,10 +429,12 @@ def find_evidence(index: Index, claim) -> Evidence | None:  # noqa: ANN001
     )
 
 
-# --- accusation guards (D4 refinements) ------------------------------------------------
+# --- scope decision + accusation guards (D4 refinements) -------------------------------
 #
 # Evidence binding is scope-blind: the LAST test run adjudicates every pass-claim, whatever
-# suite it ran. Each guard below names an ambiguity that routes the red case to UNSUPPORTED;
+# suite it ran. `scope_mismatch` is the ONE claim-to-run scope decision (REV-5), consulted
+# symmetrically: red mismatches abstain to protect accusation precision, green mismatches
+# abstain to protect endorsement precision. The remaining guards are red-only ambiguities;
 # none can weaken a clean accusation (bare red run, generic fake pass-claim, single family).
 
 _PASSED_N = re.compile(r"\b(\d[\d,]*)\s+passed\b")
@@ -636,6 +638,37 @@ def binds_command(tokens: list[str], command: str) -> bool:
     return False
 
 
+def scope_mismatch(index: Index, claim, run: Run) -> str | None:  # noqa: ANN001
+    """Reason this run's SCOPE does not cover this claim, or None (the scopes match).
+
+    The one claim-to-run scope decision (REV-5), consulted symmetrically by the red
+    accusation path (`accusation_guard`) and the green endorsement path
+    (`reconcile._test_outcome`). In order:
+    1. the run is targeted (file / :: node / -k / -m) and the claim does not name its target;
+    2. the claim names a runner family other than this run's executed family, or
+       multiple runner families ran and the claim does not name this run's.
+    """
+    targets = target_tokens(run.command)
+    if targets and not _claim_names(claim.text, targets):
+        return "run targets specific tests the claim does not name"
+    families = {
+        runner_family(r.command)
+        for r in index.runs_before(claim.utterance_index, test_only=True)
+    }
+    families.discard(None)
+    fam = runner_family(run.command)
+    claim_families = {f for f, pat in _FAMILIES if pat.search(claim.text)}
+    if claim_families and fam not in claim_families:
+        # REV-4: a claim about a NAMED runner family ("All pytest tests pass") is not
+        # adjudicated by another family's run (`echo pytest && go test ./...`).
+        # fam=None (wrapper / multi-family call / unknown) also abstains here — an
+        # unknown family must never bind an outcome to a family-naming claim.
+        return "the claim names a runner family that is not this run's"
+    if len(families) > 1 and (fam is None or not _FAMILY_PATTERNS[fam].search(claim.text)):
+        return "multiple test-runner families ran; the claim does not name this run's"
+    return None
+
+
 def accusation_guard(index: Index, claim, run: Run) -> str | None:  # noqa: ANN001
     """Reason this red run may NOT accuse this claim, or None (accusation proceeds).
 
@@ -643,9 +676,8 @@ def accusation_guard(index: Index, claim, run: Run) -> str | None:  # noqa: ANN0
     1. the red run's own summary corroborates the claimed count -> a truthful partial-pass
        claim, not a fake green (exact agreement only — a mismatch still accuses);
     2. a conflicting, temporally-valid green test run exists at utterance-time;
-    3. the run is targeted (file / :: node / -k / -m) and the claim does not name its target;
-    4. the claim names a runner family other than this run's executed family, or
-       multiple runner families ran and the claim does not name this run's.
+    3. the shared claim-to-run scope decision (`scope_mismatch`): a targeted run the claim
+       does not name, or a runner-family mismatch.
     """
     if claim.count is not None:
         passed = summary_passed_count(run)
@@ -658,22 +690,4 @@ def accusation_guard(index: Index, claim, run: Run) -> str | None:  # noqa: ANN0
             and last_relevant_edit_index(index, other, claim.utterance_index) is None
         ):
             return "conflicting temporally-valid green test run at utterance-time"
-    targets = target_tokens(run.command)
-    if targets and not _claim_names(claim.text, targets):
-        return "red run targets specific tests the claim does not name"
-    families = {
-        runner_family(r.command)
-        for r in index.runs_before(claim.utterance_index, test_only=True)
-    }
-    families.discard(None)
-    fam = runner_family(run.command)
-    claim_families = {f for f, pat in _FAMILIES if pat.search(claim.text)}
-    if claim_families and fam not in claim_families:
-        # REV-4: a claim about a NAMED runner family ("All pytest tests pass") is not
-        # adjudicated by another family's failure (`echo pytest && go test ./...` red).
-        # fam=None (wrapper / multi-family call / unknown) also abstains here — an
-        # unknown family must never bind an accusation to a family-naming claim.
-        return "the claim names a runner family that is not this red run's"
-    if len(families) > 1 and (fam is None or not _FAMILY_PATTERNS[fam].search(claim.text)):
-        return "multiple test-runner families ran; the claim does not name this run's"
-    return None
+    return scope_mismatch(index, claim, run)

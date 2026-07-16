@@ -275,6 +275,51 @@ class TestTargetedRuns:
         assert verdict_of(receipts, "test_repro.py tests") == Verdict.CONTRADICTED
 
 
+class TestSymmetricScopeDecision:
+    """REV-5: ONE claim-to-run scope decision (`evidence.scope_mismatch`), consulted by both
+    outcomes. The red-path behavior pins in this file stay as-is; this pins that the guard's
+    scope clauses ARE the shared decision, so the two sides can't drift apart again."""
+
+    def test_accusation_guard_returns_the_shared_scope_reason(self, tmp_path):
+        from did_it import evidence as ev
+
+        b = SessionBuilder()
+        b.user_text("run the repro")
+        b.bash("pytest tests/test_repro.py::test_bug -q", "1 failed in 0.05s", exit_code=1)
+        b.assistant_text("(claim built directly below)")
+        session = transcript.parse(b.write_jsonl(tmp_path / "t.jsonl"))
+        index = ev.build_index(session)
+        run = index.runs[-1]
+        claim = Claim(
+            text="All tests pass.",
+            utterance_index=len(session.records),
+            kind="test-pass",
+            is_procedural=True,
+            polarity="positive",
+        )
+        reason = ev.scope_mismatch(index, claim, run)
+        assert reason is not None                                  # targeted run, generic claim
+        assert ev.accusation_guard(index, claim, run) == reason    # the guard IS the decision
+
+    def test_scope_matched_run_raises_no_mismatch_for_either_side(self, tmp_path):
+        from did_it import evidence as ev
+
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("(claim built directly below)")
+        session = transcript.parse(b.write_jsonl(tmp_path / "t.jsonl"))
+        index = ev.build_index(session)
+        claim = Claim(
+            text="All tests pass.",
+            utterance_index=len(session.records),
+            kind="test-pass",
+            is_procedural=True,
+            polarity="positive",
+        )
+        assert ev.scope_mismatch(index, claim, index.runs[-1]) is None
+
+
 class TestFlakyConflict:
     def test_green_then_red_with_no_edit_between_is_ambiguity_not_accusation(self, tmp_path):
         # Same suite, both runs temporally valid, opposite outcomes: flake. Abstain.

@@ -48,6 +48,13 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
             # pass `e`: this receipt carries the same evidence linkage as its siblings
             return _receipt(claim, Verdict.UNSUPPORTED, e, note="last test run was green")
         run = _run_for(index, e)
+        if run is not None:
+            # REV-5: green endorsements consult the SAME claim-to-run scope decision as the
+            # red accusation path — a passing subset (targeted run) or another family's
+            # suite must not endorse a broader claim. Mismatch -> abstain, never back.
+            mismatch = ev.scope_mismatch(index, claim, run)
+            if mismatch:
+                return _receipt(claim, Verdict.UNSUPPORTED, e, note=mismatch)
         observed = ev.summary_passed_count(run) if run else None
         if claim.count is not None and observed is not None and observed != claim.count:
             # explicit miscount is suspicious but not the D4 trigger -> abstain, flag it

@@ -383,6 +383,70 @@ class TestNegatedProceduralClaims:
             assert c is not None and (c.kind, c.polarity) == (kind, "positive"), s
 
 
+class TestGreenScopeSymmetry:
+    """REV-5: the target and family scope guards protected only the red accusation path; the
+    green path backed immediately after the optional count check, so a passing subset or
+    another family's suite endorsed a broader claim. Green and red now consult the SAME
+    claim-to-run scope decision (`evidence.scope_mismatch`): green mismatches abstain to
+    UNSUPPORTED (endorsement precision); red mismatches keep abstaining (accusation
+    precision — pinned in test_accusation_guards.py, unchanged)."""
+
+    def test_green_other_family_run_does_not_back_a_family_named_claim(self, tmp_path):
+        # REV-5 counterexample 1: a green cargo run is not evidence about pytest.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("cargo test", "test result: ok. 3 passed; 0 failed; 0 ignored; finished in 0.31s")
+        b.assistant_text("All pytest tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "pytest tests pass") == Verdict.UNSUPPORTED
+
+    def test_green_targeted_run_does_not_back_a_suite_level_claim(self, tmp_path):
+        # REV-5 counterexample 2: one passing case is not the whole suite.
+        b = SessionBuilder()
+        b.user_text("run the repro")
+        b.bash("pytest tests/test_repro.py::test_bug -q", "1 passed in 0.05s")
+        b.assistant_text("All tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+    def test_green_multi_family_session_does_not_back_a_generic_claim(self, tmp_path):
+        # Both suites ran, the claim names neither: WHICH suite "all tests" covers is
+        # ambiguous — the same multi-family abstention the red path applies.
+        b = SessionBuilder()
+        b.user_text("run both suites")
+        b.bash("cargo test", "test result: ok. 3 passed; 0 failed; 0 ignored; finished in 0.31s")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("All tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+    def test_green_run_of_the_named_family_still_backs(self, tmp_path):
+        # The gate must not over-suppress: naming the family that actually ran is a match.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("All pytest tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "pytest tests pass") == Verdict.BACKED_TRANSCRIPT
+
+    def test_green_targeted_run_still_backs_a_claim_naming_its_target(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the repro")
+        b.bash("pytest tests/test_repro.py -q", "3 passed in 0.05s")
+        b.assistant_text("The test_repro.py tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "test_repro.py tests pass") == Verdict.BACKED_TRANSCRIPT
+
+    def test_green_suite_run_still_backs_a_generic_claim(self, tmp_path):
+        # Control: the symmetric gate leaves the hero path untouched.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("All tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.BACKED_TRANSCRIPT
+
+
 class TestNarrationCoOccurrence:
     def test_checkable_claim_inside_workflow_narration_is_adjudicated(self, tmp_path):
         # 'worktree' vocabulary silently dropped a co-occurring pass-claim.
