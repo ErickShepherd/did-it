@@ -131,7 +131,11 @@ against reality by hand. `did-it`'s contribution is the specific, coding-special
 transcripts reconciled against the session's own tool-call evidence — exit codes, test-framework
 summaries, file operations.
 
-Design record: [`docs/design/did-it.md`](docs/design/did-it.md).
+Design records: [`docs/design/did-it.md`](docs/design/did-it.md) ·
+[`model- and runtime-agnostic ingestion`](docs/design/model-agnostic-ingestion.md) ·
+[`cross-runtime installation plan`](docs/design/cross-runtime-installation-plan.md) ·
+[`Ralph execution guide`](docs/operations/ralph-cross-runtime.md) ·
+[`2026-07-15 adversarial review`](docs/reviews/2026-07-15-adversarial-review.md).
 
 ## License
 
