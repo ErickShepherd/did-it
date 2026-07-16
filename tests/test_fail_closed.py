@@ -16,7 +16,7 @@ from pathlib import Path
 import pytest
 
 import did_it
-from did_it import cli, hook, report, transcript
+from did_it import cli, extraction, hook, report, transcript
 from did_it.testing import SessionBuilder
 from did_it.verdicts import Receipt, Verdict
 
@@ -477,6 +477,46 @@ class TestPathologicalProse:
         b.assistant_text("ruff is clean.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "ruff is clean") == Verdict.BACKED_TRANSCRIPT
+
+    # REV-1: a prefix is not semantically monotone — the suffix beyond the cap may carry
+    # `if`, attribution, or an explicit failure admission that flips the claim's safety.
+    # An over-cap candidate must therefore never be classified from its prefix: the cap
+    # stays a regex-cost SCAN bound, not a semantic truncation.
+    _REV1_SENTENCE = (
+        "All tests pass "
+        + "because the fix touched the resolver and the cache and the loader " * 40
+        + "but one test still fails"
+    )
+
+    def test_over_cap_sentence_is_dropped_not_truncated_to_a_prefix(self):
+        # Boundary contract of sentences() itself: over-cap candidates are dropped whole,
+        # never emitted as a truncated prefix for downstream classification.
+        assert len(self._REV1_SENTENCE) > extraction._MAX_SENTENCE_CHARS
+        assert extraction.sentences(self._REV1_SENTENCE) == []
+
+    def test_truncated_failure_admission_beyond_cap_is_never_accused(self, tmp_path):
+        # End-to-end REV-1 shape: red pytest run; the sentence starts `All tests pass`,
+        # exceeds the cap, and admits `but one test still fails` BEYOND it. Truncation
+        # classified the prefix as a positive pass-claim -> false CONTRADICTED.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text(self._REV1_SENTENCE)
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert all(r.verdict != Verdict.CONTRADICTED for r in receipts)
+
+    def test_over_cap_pass_prefix_is_never_backed_either(self, tmp_path):
+        # Same shape on a GREEN run: never classified from a prefix also means the
+        # garbled candidate must not be endorsed as BACKED.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text(self._REV1_SENTENCE)
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert all(
+            r.verdict not in (Verdict.BACKED_TRANSCRIPT, Verdict.CONTRADICTED)
+            for r in receipts
+        )
 
 
 class TestOperatorFloodCommands:

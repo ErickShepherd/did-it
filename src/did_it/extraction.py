@@ -354,13 +354,21 @@ SENT_SPLIT = re.compile(r"(?<=[.!?])\s+(?=[A-Z`\"'\d(])")
 #: Cap on a single sentence before classification. The lazy `[^.;]*?` scans in CHECK_PASS /
 #: FILE_CREATED (and the runner scans) are O(n^2) on a dotless multi-KB untrusted line (measured
 #: 3.8s at 32KB); a per-sentence cap bounds each scan and makes the total linear in the input.
-#: Real claim sentences are short — truncating a pathological one can at worst drop a claim that
-#: begins past the cap (lost coverage, never a false accusation).
+#: The cap is a SCAN bound, never a semantic truncation: a prefix is not semantically monotone —
+#: the discarded suffix may carry `if`, attribution, or an explicit failure admission that flips
+#: the claim's safety (REV-1: `All tests pass … but one test still fails` truncated to a positive
+#: pass-claim -> false CONTRADICTED). An over-cap candidate is therefore DROPPED whole, never
+#: classified from its prefix. Real claim sentences are short — dropping a pathological one can
+#: at worst lose coverage, never produce a false verdict.
 _MAX_SENTENCE_CHARS = 2048
 
 
 def sentences(text: str) -> list[str]:
-    """Deterministic markdown-aware sentence segmentation of one assistant text block."""
+    """Deterministic markdown-aware sentence segmentation of one assistant text block.
+
+    Over-cap candidates (> `_MAX_SENTENCE_CHARS`) are dropped whole — see the cap's
+    comment; classifying a truncated prefix is forbidden.
+    """
     out: list[str] = []
     in_fence = False
     for line in text.splitlines():
@@ -372,7 +380,10 @@ def sentences(text: str) -> list[str]:
         line = BULLET.sub("", line).strip()
         if not line:
             continue
-        out.extend(s.strip()[:_MAX_SENTENCE_CHARS] for s in SENT_SPLIT.split(line) if s.strip())
+        out.extend(
+            t for s in SENT_SPLIT.split(line)
+            if (t := s.strip()) and len(t) <= _MAX_SENTENCE_CHARS
+        )
     return out
 
 
