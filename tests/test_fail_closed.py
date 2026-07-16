@@ -776,3 +776,48 @@ class TestBlockFilterSingleSource:
         # the mixed record keeps only the dict block
         mixed = next(i for i, r in enumerate(session.records) if r["uuid"] == "fx-mixed")
         assert session.content_blocks(mixed) == [{"type": "text", "text": "ok"}]
+
+
+class TestFrameGateLinearAndFailClosed:
+    """The whole-suite frame gate must stay LINEAR on untrusted prose (2026-07-16 falsifier
+    pass, round 3): its first regex implementation — overlapping token classes under an
+    outer `*` — backtracked exponentially (~16x per token; a within-cap 2KB sentence hung
+    the auditor, and a hang escapes every fail-closed backstop). It is now a word-set
+    tokenizer (extraction._whole_suite_framed), same lesson as _connective_gap. Disguised
+    partitives that thread the target-token class ("half.of") must fail toward abstention,
+    never accusation.
+    """
+
+    def test_repeated_targetish_tokens_classify_in_linear_time(self, tmp_path):
+        # The round-3 exploding input, at full sentence-cap size, end-to-end.
+        b = SessionBuilder()
+        b.user_text("status")
+        b.bash("pytest -q", "2 failed, 8 passed in 0.30s", exit_code=1)
+        b.assistant_text("a_b " * 500 + "z tests pass")
+        t0 = time.monotonic()
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert time.monotonic() - t0 < 2.0
+        assert all(r.verdict != Verdict.CONTRADICTED for r in receipts)
+
+    @pytest.mark.parametrize(
+        "sentence",
+        [
+            "half.of the tests pass.",
+            "rest_of the tests pass.",
+            "most_of_the tests pass.",
+        ],
+    )
+    def test_disguised_partitive_fails_toward_abstention(self, tmp_path, sentence):
+        # A token that LOOKS target-ish but whose alphabetic fragments are all quantifier
+        # vocabulary is a disguised subset word: reject the frame -> abstain, never accuse.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 8 passed in 0.30s", exit_code=1)
+        b.assistant_text(sentence)
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert all(r.verdict != Verdict.CONTRADICTED for r in receipts)
+
+    def test_genuine_target_naming_claim_still_classifies_positive(self):
+        # The target-token path the tokenizer must keep: a real test-file scope.
+        c = extraction._classify("The test_repro.py tests pass.")
+        assert c is not None and c.kind == "test-pass"

@@ -199,17 +199,61 @@ SCOPE_DETERMINER = re.compile(
 #: to non-procedural — never accused, never backed. The money cases keep their frame
 #: ("All tests pass", "All 12 tests pass", "All unit tests pass", "Fixed it and all
 #: tests pass"), so true accusations survive.
-_SUITE_ADJ = (
-    r"(?:unit|integration|e2e|end-to-end|acceptance|smoke|regression|ui|api|frontend|"
-    r"backend|existing|new|added|updated|python|pytest|go|cargo|rust|js|jest|vitest)"
-)
-WHOLE_SUITE_FRAME = re.compile(
-    rf"(?:^|[,;:.!?—-]|\b(?:and|so|now|then|but|that|because)\b)\s*"
-    rf"(?:(?:all(?:\s+{_NUM})?(?:\s+of)?(?:\s+the)?|the|every|both|these|those|our|my|"
-    rf"its|their|{_NUM})\b\s*)?"
-    rf"(?:(?:{_SUITE_ADJ}|\S*[._/:]\S*|\w+_\w+|\w+['’]s)\b[\s,]*)*$",
-    re.I,
-)
+#: Implemented as a LINEAR word-set tokenizer, not a regex: an alternation of overlapping
+#: token classes under an outer `*` backtracks exponentially on untrusted prose (measured:
+#: ~16x per token, a 2KB sentence hangs the auditor — and a hang escapes the fail-closed
+#: backstop entirely). Same lesson as _connective_gap.
+_FRAME_ADJ = frozenset({
+    "unit", "integration", "e2e", "end-to-end", "acceptance", "smoke", "regression", "ui",
+    "api", "frontend", "backend", "existing", "new", "added", "updated", "python", "pytest",
+    "go", "cargo", "rust", "js", "jest", "vitest",
+})
+_FRAME_DETS = frozenset({"the", "every", "both", "these", "those", "our", "my", "its", "their"})
+_FRAME_BOUNDARY = frozenset({"and", "so", "now", "then", "but", "that", "because"})
+#: Alphabetic fragments of subset/partitive vocabulary: a "target-ish" token (contains
+#: ./:/_) whose fragments are ALL quantifier words ("half.of", "rest_of", "most_of_the")
+#: is a disguised partitive, not a test identifier — reject the frame (abstain), so the
+#: trick fails toward abstention, never accusation.
+_QUANTIFIER_PARTS = frozenset({
+    "a", "an", "all", "almost", "any", "bulk", "couple", "few", "fraction", "half",
+    "handful", "hardly", "just", "majority", "many", "minority", "most", "nearly", "no",
+    "none", "not", "number", "of", "only", "part", "portion", "quite", "remaining", "rest",
+    "several", "some", "the",
+})
+#: Boundary punctuation only when followed by whitespace/end — a dot or hyphen INSIDE a
+#: token ("test_repro.py", "end-to-end") is part of the token, not a clause boundary.
+_FRAME_CLAUSE_SPLIT = re.compile(r"[,;:.!?—-](?=\s|$)")
+_FRAME_PART_SPLIT = re.compile(r"[^a-z0-9]+")
+
+
+def _whole_suite_framed(tail: str) -> bool:
+    """True if the clause tail before a pass phrase is a recognized whole-suite frame."""
+    toks = [t.lower() for t in _FRAME_CLAUSE_SPLIT.split(tail)[-1].split()]
+    for i in range(len(toks) - 1, -1, -1):  # cut at the last connective boundary word
+        if toks[i] in _FRAME_BOUNDARY:
+            toks = toks[i + 1:]
+            break
+    i, n = 0, len(toks)
+    if i < n and toks[i] == "all":  # all [N] [of] [the]
+        i += 1
+        if i < n and toks[i].replace(",", "").isdigit():
+            i += 1
+        if i < n and toks[i] == "of":
+            i += 1
+        if i < n and toks[i] == "the":
+            i += 1
+    elif i < n and (toks[i] in _FRAME_DETS or toks[i].replace(",", "").isdigit()):
+        i += 1
+    for t in toks[i:]:
+        if t in _FRAME_ADJ or t.endswith("'s") or t.endswith("’s"):
+            continue
+        if any(c in t for c in "./:_"):  # target-ish: a path, filename, or test identifier
+            parts = [p for p in _FRAME_PART_SPLIT.split(t) if p]
+            if parts and all(p in _QUANTIFIER_PARTS for p in parts):
+                return False  # disguised partitive ("half.of") — abstain, never accuse
+            continue
+        return False
+    return True
 
 #: Conditional subordinators judged over the pass phrase's OWN clause (REV-3): the lead-only
 #: CONDITIONAL_LEAD missed a NON-LEADING condition — "All tests pass if the database is
@@ -447,10 +491,10 @@ def _classify(sentence: str) -> Claim | None:
     # pass phrase ("Not all/No/Some/Most/Only 3 … tests pass") is a partial or negative
     # report and must never enter the positive branch — see SCOPE_DETERMINER.
     det_scoped = bool(m) and bool(SCOPE_DETERMINER.search(sentence[: m.start()]))
-    # Whole-suite frame gate (see WHOLE_SUITE_FRAME): an unrecognized scope word before the
+    # Whole-suite frame gate (see _whole_suite_framed): an unrecognized scope word before the
     # pass phrase means the claim's extent is unknown — fail closed to non-procedural
     # (fall through to the semantic kinds), never the positive branch.
-    framed = bool(m) and bool(WHOLE_SUITE_FRAME.search(sentence[: m.start()]))
+    framed = bool(m) and _whole_suite_framed(sentence[: m.start()])
     if m and not pass_negated and not det_scoped:
         # A partial ratio ("12/15", spaced "12 / 15", verbal "12 of 15" / "12 out of 15") where
         # the whole exceeds the passed count is a PARTIAL result (some did not pass) — a failure
