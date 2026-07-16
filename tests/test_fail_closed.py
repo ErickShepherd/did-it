@@ -519,6 +519,88 @@ class TestPathologicalProse:
         )
 
 
+class TestConditionalMoodAndAttribution:
+    """REV-3: the conditional guard checked only the sentence LEAD, and the attribution guard
+    knew only double/curly quotes — so a non-leading condition ("All tests pass if the database
+    is running.") or an inline-code / single-quoted quotation ("The stale report says `All tests
+    pass`.") classified as an endorsed positive pass-claim and, against a red run, was falsely
+    CONTRADICTED. Ambiguous mood/attribution must DROP the claim (never infer endorsement),
+    while conditionals/quotes that do not scope the pass phrase keep the money case accusing.
+    """
+
+    #: Shapes whose pass phrase is conditional-mooded or quoted — never an endorsed claim.
+    _DROPPED = (
+        "All tests pass if the database is running.",
+        "All tests pass when the feature flag is enabled.",
+        "We merged the fix; if the DB is up, all tests pass.",
+        "The stale report says `All tests pass`.",
+        "The old status was 'All tests pass' according to the log.",
+    )
+
+    @pytest.mark.parametrize("sentence", _DROPPED)
+    def test_conditional_or_attributed_pass_is_not_a_positive_claim(self, sentence):
+        # Boundary contract of _classify itself (check()'s wrapper can mask): the pass
+        # phrase must never surface as a positive test-pass claim.
+        c = extraction._classify(sentence)
+        assert c is None or c.kind != "test-pass", sentence
+
+    def test_adjacent_conditional_and_code_do_not_suppress(self):
+        # Precision controls: a completed lead, inline code that does NOT contain the pass
+        # phrase, a conditional in a NEIGHBORING `;`-clause, and word-internal apostrophes
+        # must all keep classifying as a genuine positive pass-claim.
+        for s in (
+            "After I fixed the bug, all tests pass.",
+            "When I ran pytest, all 12 tests passed.",
+            "Ran `pytest -q`; all tests pass.",
+            "All tests pass; if the DB is down, restart it.",
+            "The plugin's tests pass and it's green.",
+        ):
+            c = extraction._classify(s)
+            assert c is not None and c.kind == "test-pass", s
+            assert c.polarity == "positive", s
+
+    def _red_session(self, tmp_path, sentence):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text(sentence)
+        return b.write_jsonl(tmp_path / "t.jsonl")
+
+    @pytest.mark.parametrize("sentence", _DROPPED)
+    def test_red_run_never_contradicts_conditional_or_attributed_prose(self, tmp_path, sentence):
+        # End-to-end REV-3 shape: red pytest run + conditional/attributed prose must
+        # never be an accusation.
+        receipts = did_it.check(self._red_session(tmp_path, sentence))
+        assert all(r.verdict != Verdict.CONTRADICTED for r in receipts), sentence
+
+    @pytest.mark.parametrize("sentence", _DROPPED)
+    def test_green_run_never_backs_conditional_or_attributed_prose(self, tmp_path, sentence):
+        # Dropping means dropping in BOTH directions: a green run must not endorse a
+        # conditional or quoted pass phrase as BACKED either.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text(sentence)
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert all(
+            r.verdict not in (Verdict.BACKED_TRANSCRIPT, Verdict.CONTRADICTED)
+            for r in receipts
+        ), sentence
+
+    def test_unconditional_pass_beside_inline_code_still_accuses(self, tmp_path):
+        # The money case survives: inline code elsewhere in the sentence is not attribution
+        # of the pass phrase.
+        receipts = did_it.check(self._red_session(tmp_path, "Ran `pytest -q`; all tests pass."))
+        assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
+
+    def test_conditional_in_a_neighboring_clause_still_accuses(self, tmp_path):
+        # A condition in a LATER `;`-clause does not scope the pass phrase.
+        receipts = did_it.check(
+            self._red_session(tmp_path, "All tests pass; if the DB is down, restart it.")
+        )
+        assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
+
+
 class TestOperatorFloodCommands:
     def test_chain_operator_flood_adjudicates_quickly_and_abstains(self, tmp_path):
         # TEST_RUNNERS anchors at every chain operator and greedily scans from each — an

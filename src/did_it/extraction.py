@@ -180,6 +180,57 @@ SCOPE_DETERMINER = re.compile(
     re.I,
 )
 
+#: Conditional subordinators judged over the pass phrase's OWN clause (REV-3): the lead-only
+#: CONDITIONAL_LEAD missed a NON-LEADING condition — "All tests pass if the database is
+#: running." classified as an endorsed pass and, against a red run, was falsely CONTRADICTED.
+#: The clause is bounded by `;` on BOTH sides (unlike _pass_clause_to_end's negation span) so
+#: a condition in a NEIGHBORING clause ("All tests pass; if the DB is down, restart it.")
+#: never suppresses an unconditional pass. `after` is deliberately absent: a trailing "after
+#: my change" is a completed report, not a condition (and `unless`/`once`/`assuming` already
+#: suppress sentence-wide via HEDGES). Ambiguous mood ("… when the flag is enabled") DROPS
+#: the claim rather than inferring endorsement — a dropped claim can never be falsely
+#: accused or falsely backed.
+CONDITIONAL_IN_CLAUSE = re.compile(
+    r"\b(?:if|when(?:ever)?|until|provided(?:\s+that)?|in\s+case|"
+    r"as\s+long\s+as|so\s+long\s+as)\b",
+    re.I,
+)
+
+#: Attribution spans recognized AROUND the matched pass phrase (REV-3): inline code and true
+#: single-quoted spans are quotation, not endorsement ("The stale report says `All tests
+#: pass`."). Containment-based — unlike the sentence-wide double/curly ATTRIBUTION_QUOTE —
+#: so inline code elsewhere in the sentence ("Ran `pytest -q`; all tests pass.") never
+#: suppresses a genuine claim. Single-quote boundaries must not be word-internal apostrophes
+#: ("the plugin's tests pass and it's green" contains no quoted span).
+INLINE_CODE_SPAN = re.compile(r"`[^`\n]+`")
+SINGLE_QUOTE_SPAN = re.compile(r"(?<!\w)'[^'\n]+'(?!\w)|‘[^’\n]+’")
+
+
+def _pass_conditional(sentence: str, start: int, end: int) -> bool:
+    """True if the clause containing the pass phrase carries a conditional subordinator.
+
+    The clause is the `;`-bounded span around the match — see CONDITIONAL_IN_CLAUSE. A
+    completed `after/once/when <past-tense>, …` lead (COMPLETED_LEAD) is an accomplished
+    report, so the search starts beyond it: "When I ran pytest, all 12 tests passed."
+    stays a claim.
+    """
+    lo = sentence.rfind(";", 0, start) + 1
+    hi = sentence.find(";", end)
+    clause = sentence[lo: hi if hi != -1 else len(sentence)]
+    done = COMPLETED_LEAD.match(clause)
+    return bool(CONDITIONAL_IN_CLAUSE.search(clause, done.end() if done else 0))
+
+
+def _pass_attributed(sentence: str, start: int, end: int) -> bool:
+    """True if the pass phrase lies INSIDE an inline-code or single-quoted span (REV-3) —
+    quoted material is someone else's words; endorsement is never inferred."""
+    return any(
+        s.start() < start and end < s.end()
+        for pat in (INLINE_CODE_SPAN, SINGLE_QUOTE_SPAN)
+        for s in pat.finditer(sentence)
+    )
+
+
 #: Named non-test checks claimed clean. The tool word doubles as the evidence-binding token.
 CHECK_WORDS = (
     r"(?:ruff|lint(?:er)?|mypy|pyright|flake8|black|isort|eslint|prettier|tsc|typecheck|"
@@ -283,7 +334,18 @@ def _classify(sentence: str) -> Claim | None:
     # must stay negative (review: exemption-neutralized admissions were falsely accused).
     exempt = TEST_NEG_EXEMPT.sub(" ", sentence)
     negated = bool(TEST_NEG.search(exempt))
-    m = TEST_PASS.search(sentence)
+    # REV-3: a conditional-mooded or quoted/attributed pass phrase is not an endorsed claim —
+    # skip that match (drop, never infer endorsement); a later unattributed, unconditional
+    # match in another clause may still claim.
+    m = next(
+        (
+            mm
+            for mm in TEST_PASS.finditer(sentence)
+            if not _pass_conditional(sentence, mm.start(), mm.end())
+            and not _pass_attributed(sentence, mm.start(), mm.end())
+        ),
+        None,
+    )
     # Scope the pass-claim's negation to its own clause-through-end span (see _pass_clause_to_end):
     # an earlier `;`-clause must not invert a genuine pass. Other kinds keep sentence-level `negated`.
     pass_negated = (
