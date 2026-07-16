@@ -35,8 +35,12 @@ Read this file before changing the repository.
 For accusation-path changes, also run the private honest-session anchor when it is available, as
 specified in the Ralph guide. Passing self-authored tests is not an independent review.
 
-## Ralph model pin
+## Ralph loop mechanics
 
-If the owner requests Claude Opus 4.6, use the full model ID `claude-opus-4-6`. Do not use the
-moving `opus` alias. Start a fresh non-interactive Claude process for each ledger item and keep the
-completion signal mechanical and recomputed from disk.
+Loops here follow the installed `/ralph-loop` skill (checklist anchor); the Ralph guide above is
+this repo's application of it, and the skill is the authority on loop mechanics. Pin models by full
+ID (e.g. `claude-opus-4-6` when the owner requests Opus 4.6), never the moving `opus` alias. Start
+a fresh non-interactive Claude process for each ledger item and keep the completion signal
+mechanical and recomputed from disk. Every spawned process environment arms `CLAUDE_LOOP_GUARD=1`
+plus the `guard-one-unit.py` cap variables (see the Ralph guide's invocation section); an `export`
+inside the session never reaches the hooks.
