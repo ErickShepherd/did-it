@@ -248,14 +248,54 @@ class Run:
         return f"{exit_m.group(0) if exit_m else f'exit {self.exit_code}'}; {fail_span}"
 
 
+#: Operation kind per file-mutating tool (REV-6): Write creates (or wholly rewrites) the file
+#: at its path; Edit and NotebookEdit require an existing file, so they are never
+#: create-capable. An adapter mapping a new runtime picks the kind explicitly here — the
+#: distinction is part of the event model, not inferred downstream.
+_CHANGE_OPS = {"Write": "create", "Edit": "edit", "NotebookEdit": "notebook-edit"}
+
+
+def _repo_relative(path: str, cwd: str) -> str:
+    """Normalized in-repo form of a change's file_path (REV-6).
+
+    Real transcripts record absolute paths; the record's cwd is the working root at call
+    time. Strips the cwd prefix (segment-aligned) and any leading `./`; a path outside the
+    cwd keeps its original form (segment-aligned suffix matching still applies to it)."""
+    if cwd:
+        prefix = cwd.rstrip("/") + "/"
+        if path.startswith(prefix):
+            path = path[len(prefix):]
+    while path.startswith("./"):
+        path = path[2:]
+    return path
+
+
+def change_matches_claim_path(claimed: str, change_path: str) -> bool:
+    """True iff a change's normalized path IS the claimed path (REV-6).
+
+    Segment-aligned: the claimed path must match the change path's whole tail, so a claim
+    carrying a directory (`src/config.py`) never matches on basename alone
+    (`tests/config.py`), and a filename never matches inside a longer one (`myconfig.py`).
+    A bare-filename claim states no directory, so it matches that file in any directory."""
+    while claimed.startswith("./"):
+        claimed = claimed[2:]
+    if not claimed:
+        return False
+    return change_path == claimed or change_path.endswith("/" + claimed)
+
+
 @dataclass
 class Change:
-    """An Edit/Write tool_use — the events the temporal guard is measured against."""
+    """A file-mutating tool_use — the temporal-guard events, and the evidence pool for
+    file-creation claims. `path` is the normalized in-repo path; `op` is the operation
+    kind (create / edit / notebook-edit) — only "create" can back a creation claim
+    (REV-6: an edit proves the file was modified, not that it was created)."""
 
     index: int
     path: str
     tool: str
     ref: str
+    op: str
 
 
 @dataclass
@@ -311,7 +351,7 @@ def build_index(session) -> Index:  # noqa: ANN001
                 use = pending.pop(block.get("tool_use_id"), None)
                 if use is None:
                     continue
-                _, name, tool_input = use
+                use_idx, name, tool_input = use
                 if not isinstance(tool_input, dict):
                     tool_input = {}  # malformed block internals fail closed, never crash
                 output = _result_text(block.get("content"))
@@ -332,13 +372,17 @@ def build_index(session) -> Index:  # noqa: ANN001
                             is_test_run=is_test_command(command),
                         )
                     )
-                elif name in ("Edit", "Write", "NotebookEdit") and not block.get("is_error"):
+                elif name in _CHANGE_OPS and not block.get("is_error"):
+                    # cwd is read off the tool_use record itself (real transcripts stamp it
+                    # per record); a missing/malformed cwd just skips normalization.
+                    cwd = str(session.records[use_idx].get("cwd") or "")
                     changes.append(
                         Change(
                             index=idx,
-                            path=str(tool_input.get("file_path") or ""),
+                            path=_repo_relative(str(tool_input.get("file_path") or ""), cwd),
                             tool=name,
                             ref=block["tool_use_id"],
+                            op=_CHANGE_OPS[name],
                         )
                     )
     return Index(runs=runs, changes=changes)

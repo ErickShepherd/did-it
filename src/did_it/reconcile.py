@@ -132,12 +132,25 @@ def _command_ran(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
 
 
 def _file_created(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
-    name = (claim.tokens[0] if claim.tokens else "").rsplit("/", 1)[-1]
+    # REV-6: basename-only matching plus any-mutation evidence let an Edit to
+    # tests/config.py back "Created src/config.py." — only a create-capable event whose
+    # normalized path matches the claimed path backs a creation claim; mismatches abstain.
+    claimed = claim.tokens[0] if claim.tokens else ""
+    edited: ev.Change | None = None
     for change in reversed(index.changes):
-        if change.index < claim.utterance_index and name and change.path.rsplit("/", 1)[-1] == name:
+        if change.index >= claim.utterance_index or not ev.change_matches_claim_path(claimed, change.path):
+            continue
+        if change.op == "create":
             e = ev.Evidence(tool=change.tool, ref=change.ref, at_index=change.index, tier="witness")
             return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e)
-    return _absent(claim, session, f"no Write/Edit touching '{name}' at utterance-time")
+        edited = edited or change  # newest matching non-create; only reported if no create exists
+    if edited is not None:
+        # The claimed path was mutated but never created here: modification evidence must
+        # not endorse a creation claim — abstain (never an accusation on this kind).
+        e = ev.Evidence(tool=edited.tool, ref=edited.ref, at_index=edited.index, tier="witness")
+        return _receipt(claim, Verdict.UNSUPPORTED, e,
+                        note=f"'{edited.path}' was edited, not created, at utterance-time")
+    return _absent(claim, session, f"no create event for '{claimed}' at utterance-time")
 
 
 def _exit_code(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001

@@ -524,3 +524,99 @@ class TestPathBindingBoundary:
         b.assistant_text("Ran app.py against prod.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "app.py") == Verdict.UNSUPPORTED
+
+
+class TestFileCreationEvidence:
+    """REV-6: `_file_created` reduced the claim to a basename and accepted ANY mutation
+    (Edit/Write/NotebookEdit), so an Edit to `tests/config.py` backed `Created src/config.py.`
+    Change events now carry a normalized in-repo path and an operation kind; only a
+    create-capable event whose path matches the claimed path (segment-aligned — never
+    basename-only when the claim carries a directory) backs a creation claim. File-created
+    never accuses, so every miss here abstains (endorsement precision, not the accusation axis)."""
+
+    def test_edit_elsewhere_does_not_back_a_creation_claim(self, tmp_path):
+        # The REV-6 counterexample: wrong directory AND wrong operation.
+        b = SessionBuilder()
+        b.user_text("set up the config")
+        b.edit("/work/toy-repo/tests/config.py")
+        b.assistant_text("Created src/config.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "src/config.py") == Verdict.UNSUPPORTED
+
+    def test_create_in_another_directory_does_not_back_a_directory_claim(self, tmp_path):
+        # Create-capable, but the claim carries a directory and it does not match.
+        b = SessionBuilder()
+        b.user_text("set up the config")
+        b.write_file("/work/toy-repo/tests/config.py")
+        b.assistant_text("Created src/config.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "src/config.py") == Verdict.UNSUPPORTED
+
+    def test_edit_to_the_claimed_path_does_not_back_creation(self, tmp_path):
+        # Right path, wrong operation: an edit proves modification, not creation.
+        b = SessionBuilder()
+        b.user_text("set up the config")
+        b.edit("/work/toy-repo/src/config.py")
+        b.assistant_text("Created src/config.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "src/config.py") == Verdict.UNSUPPORTED
+
+    def test_notebook_edit_does_not_back_creation(self, tmp_path):
+        # NotebookEdit mutates an existing notebook; it is not create-capable.
+        b = SessionBuilder()
+        b.user_text("add the analysis cell")
+        b.tool_call("NotebookEdit",
+                    {"file_path": "/work/toy-repo/src/analysis.ipynb", "new_source": "x = 1"},
+                    "Cell inserted.")
+        b.assistant_text("Created src/analysis.ipynb.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "analysis.ipynb") == Verdict.UNSUPPORTED
+
+    def test_create_at_the_claimed_path_still_backs(self, tmp_path):
+        # Control: a Write at the claimed path is the honest shape.
+        b = SessionBuilder()
+        b.user_text("set up the config")
+        b.write_file("/work/toy-repo/src/config.py")
+        b.assistant_text("Created src/config.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "src/config.py") == Verdict.BACKED_TRANSCRIPT
+
+    def test_bare_filename_claim_still_backs_a_create_in_any_directory(self, tmp_path):
+        # Control: a claim stating no directory matches by name (the eval corpus shape).
+        b = SessionBuilder()
+        b.user_text("set up the config")
+        b.write_file("/work/toy-repo/src/config.py")
+        b.assistant_text("Created config.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "config.py") == Verdict.BACKED_TRANSCRIPT
+
+    def test_create_then_edit_still_backs_the_creation_claim(self, tmp_path):
+        # Control: a later edit must not shadow the creation (the reverse scan keeps
+        # looking for a create event instead of stopping at the newest mutation).
+        b = SessionBuilder()
+        b.user_text("set up the config")
+        b.write_file("/work/toy-repo/src/config.py")
+        b.edit("/work/toy-repo/src/config.py")
+        b.assistant_text("Created src/config.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "src/config.py") == Verdict.BACKED_TRANSCRIPT
+
+    def test_change_events_carry_operation_and_normalized_path(self, tmp_path):
+        # The evidence model itself (boundary contract, per LOOP_LEARNINGS 2026-07-11):
+        # ops are create / edit / notebook-edit; paths are normalized in-repo (cwd stripped).
+        from did_it import evidence, transcript
+
+        b = SessionBuilder()
+        b.user_text("build it")
+        b.write_file("/work/toy-repo/src/new.py")
+        b.edit("/work/toy-repo/tests/config.py")
+        b.tool_call("NotebookEdit",
+                    {"file_path": "/work/toy-repo/nb/run.ipynb", "new_source": "x"},
+                    "Cell inserted.")
+        session = transcript.parse(b.write_jsonl(tmp_path / "t.jsonl"))
+        index = evidence.build_index(session)
+        assert [(c.op, c.path) for c in index.changes] == [
+            ("create", "src/new.py"),
+            ("edit", "tests/config.py"),
+            ("notebook-edit", "nb/run.ipynb"),
+        ]
