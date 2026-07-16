@@ -9,7 +9,7 @@ from __future__ import annotations
 import did_it
 from did_it import evidence
 from did_it.verdicts import Verdict
-from did_it.evidence import Run, classify_outcome, is_test_command, target_tokens
+from did_it.evidence import Run, classify_outcome, is_test_command, runner_family, target_tokens
 
 from did_it.testing import SessionBuilder
 
@@ -104,6 +104,42 @@ class TestIsTestCommand:
         # _runner_clause underlies target_tokens: it must return only the runner's own
         # sub-command, not a neighbouring line, so scopes aren't read across a newline.
         assert target_tokens("cd /work\npytest tests/test_foo.py") == {"test_foo.py"}
+
+
+class TestRunnerFamilyExecutedClause:
+    """REV-4 unit pins: the family comes from the stripped EXECUTED runner clause only.
+    Non-executed mentions (echoed words, quoted text, non-executing `--version` forms)
+    never set it, and two executing families in one completed call are ambiguous."""
+
+    def test_echoed_runner_mention_does_not_set_the_family(self):
+        assert runner_family("echo pytest && go test ./...") == "go"
+
+    def test_every_family_in_non_executed_positions_is_ignored(self):
+        # every supported family word rides in echo/quoted (non-executed) positions;
+        # only the executed go clause decides
+        cmd = ("echo pytest tox cargo rust golang npm jest node rspec ruby mvn java "
+               '&& echo "cargo test && npm test" && go test ./...')
+        assert runner_family(cmd) == "go"
+
+    def test_two_executed_families_in_one_call_is_none(self):
+        assert runner_family("pytest -q && go test ./...") is None
+
+    def test_non_executing_runner_clause_does_not_set_the_family(self):
+        assert runner_family("pytest --version && go test ./...") == "go"
+
+    def test_simple_runners_keep_their_family(self):
+        for cmd, fam in [("pytest -q", "python"),
+                         (".venv/bin/python -m pytest -q", "python"),
+                         ("cargo test", "rust"),
+                         ("go test ./...", "go"),
+                         ("npm test", "js"),
+                         ("rspec spec/", "ruby"),
+                         ("mvn test", "jvm")]:
+            assert runner_family(cmd) == fam, cmd
+
+    def test_unbounded_command_has_no_family(self):
+        # not scan-bounded -> not evaluable as a witness -> no family binding either
+        assert runner_family("pytest " + "&& x " * 200) is None
 
 
 class TestTemporalGuardRelevance:

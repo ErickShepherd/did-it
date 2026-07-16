@@ -98,20 +98,28 @@ def _stripped(command: str) -> str:
 _CLAUSE_SEP = re.compile(r"&&|\|\||;|\||\n|&")
 
 
-def is_test_command(command: str) -> bool:
-    """True if the Bash command actually EXECUTES a test runner (not merely mentions one).
+def _runner_clauses(command: str) -> list[str]:
+    """Sub-commands that invoke a runner in EXECUTING form, in order.
 
-    A run is a test iff SOME sub-command both invokes a runner and is not a non-executing form
-    (`--version`, `--collect-only`, …). `_NON_EXECUTING` is checked PER CLAUSE, not over the whole
-    command, so an unrelated `--version` on a different sub-command (`pytest tests/ &&
-    node build.js --version`) no longer drops a real test run.
+    A clause qualifies iff it invokes a runner at a command position and is not a
+    non-executing form (`--version`, `--collect-only`, …); `_NON_EXECUTING` is checked PER
+    CLAUSE, not over the whole command, so an unrelated `--version` on a different
+    sub-command never drops a real test run. Callers strip quoted/heredoc text first when
+    mentions inside it must not count. Shared by `is_test_command`, `_runner_clause`, and
+    `runner_family` so the three can't drift to different notions of "executed runner".
     """
+    return [
+        clause
+        for clause in _CLAUSE_SEP.split(command)
+        if TEST_RUNNERS.search(clause) and not _NON_EXECUTING.search(clause)
+    ]
+
+
+def is_test_command(command: str) -> bool:
+    """True if the Bash command actually EXECUTES a test runner (not merely mentions one)."""
     if not _scan_bounded(command):
         return False
-    return any(
-        TEST_RUNNERS.search(clause) and not _NON_EXECUTING.search(clause)
-        for clause in _CLAUSE_SEP.split(_stripped(command))
-    )
+    return bool(_runner_clauses(_stripped(command)))
 
 #: Test-framework outcome markers, deliberately narrow (anchor calibration: compound
 #: Bash commands make the command exit code an unreliable witness for the TEST outcome — three
@@ -481,18 +489,29 @@ def summary_passed_count(run: Run) -> int | None:
 
 
 def runner_family(command: str) -> str | None:
-    for fam, pat in _FAMILIES:
-        if pat.search(command):
-            return fam
-    return None
+    """Family of the command's EXECUTED runner clause(s), or None (unknown/ambiguous).
+
+    REV-4: scanning the whole command read non-executed mentions — `echo pytest &&
+    go test ./...` returned python from the echoed word, so the go failure was believed
+    to belong to the family a pytest claim names. Only the stripped executable runner
+    clauses are scanned, and more than one executing family in a single completed call
+    is ambiguous -> None (unknown must never manufacture a family binding).
+    """
+    if not _scan_bounded(command):
+        return None  # not evaluable as a witness -> no family binding either
+    families = {
+        fam
+        for clause in _runner_clauses(_stripped(command))
+        for fam, pat in _FAMILIES
+        if pat.search(clause)
+    }
+    return families.pop() if len(families) == 1 else None
 
 
 def _runner_clause(command: str) -> str:
-    """The sub-command of a compound line that actually invokes the runner."""
-    for clause in _CLAUSE_SEP.split(command):
-        if TEST_RUNNERS.search(clause):
-            return clause
-    return command
+    """The sub-command of a compound line that actually invokes (executes) the runner."""
+    clauses = _runner_clauses(command)
+    return clauses[0] if clauses else command
 
 
 def target_tokens(command: str) -> set[str]:
@@ -625,7 +644,8 @@ def accusation_guard(index: Index, claim, run: Run) -> str | None:  # noqa: ANN0
        claim, not a fake green (exact agreement only — a mismatch still accuses);
     2. a conflicting, temporally-valid green test run exists at utterance-time;
     3. the run is targeted (file / :: node / -k / -m) and the claim does not name its target;
-    4. multiple runner families ran and the claim does not name this run's family.
+    4. the claim names a runner family other than this run's executed family, or
+       multiple runner families ran and the claim does not name this run's.
     """
     if claim.count is not None:
         passed = summary_passed_count(run)
@@ -647,6 +667,13 @@ def accusation_guard(index: Index, claim, run: Run) -> str | None:  # noqa: ANN0
     }
     families.discard(None)
     fam = runner_family(run.command)
+    claim_families = {f for f, pat in _FAMILIES if pat.search(claim.text)}
+    if claim_families and fam not in claim_families:
+        # REV-4: a claim about a NAMED runner family ("All pytest tests pass") is not
+        # adjudicated by another family's failure (`echo pytest && go test ./...` red).
+        # fam=None (wrapper / multi-family call / unknown) also abstains here — an
+        # unknown family must never bind an accusation to a family-naming claim.
+        return "the claim names a runner family that is not this red run's"
     if len(families) > 1 and (fam is None or not _FAMILY_PATTERNS[fam].search(claim.text)):
         return "multiple test-runner families ran; the claim does not name this run's"
     return None

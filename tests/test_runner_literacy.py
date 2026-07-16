@@ -109,6 +109,41 @@ class TestGoLiteracy:
         ) != Verdict.CONTRADICTED
 
 
+class TestRunnerFamilyClauseBinding:
+    """REV-4: runner_family() scanned the WHOLE command, so a non-executed mention
+    (`echo pytest && go test ./...`) attributed the go failure to the python family and
+    the cross-family guard believed the red run was about the claim's named runner.
+    The family must come from the EXECUTED runner clause, and a claim that names a
+    family other than the red run's abstains — never accuses."""
+
+    def test_red_go_run_behind_echoed_pytest_does_not_accuse_pytest_claim(self, tmp_path):
+        # the REV-4 counterexample: the go failure is not evidence about pytest
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("echo pytest && go test ./...", "pytest\n" + GO_RED, exit_code=1)
+        b.assistant_text("All pytest tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "pytest tests pass") == Verdict.UNSUPPORTED
+
+    def test_generic_claim_after_the_same_red_compound_run_still_accuses(self, tmp_path):
+        # over-suppression pin: a claim naming NO family is still accused by the go red
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("echo pytest && go test ./...", "pytest\n" + GO_RED, exit_code=1)
+        b.assistant_text("All tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "All tests pass") == Verdict.CONTRADICTED
+
+    def test_red_pytest_run_still_accuses_a_pytest_naming_claim(self, tmp_path):
+        # over-suppression pin: when the named family IS the red run's, the money case holds
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("All pytest tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "pytest tests pass") == Verdict.CONTRADICTED
+
+
 class TestSummaryDiscipline:
     """Unit-level pins on the new markers — a bare word must not read as a summary."""
 
