@@ -150,14 +150,33 @@ TEST_FAIL = re.compile(
 )
 
 #: Partial pass/total ratios in every sibling form the slash-only TEST_PASS branch misses:
-#: unspaced "12/15", spaced "12 / 15", and verbal "12 of 15" / "12 out of 15", each followed
-#: by pass/green. When the whole exceeds the passed count some tests did NOT pass — a partial
-#: admission, not a clean pass. TEST_PASS's branches 1/2 otherwise grab the WHOLE as the count,
-#: so left positive it reads as a pass of all N and, against a partially-red run, is falsely
-#: CONTRADICTED. Detected here so `_classify` can route every form negative.
+#: unspaced "12/15", spaced "12 / 15", and verbal "12 of 15" / "12 out of 15" / "12 of the
+#: 15", each followed by pass/green. When the whole exceeds the passed count some tests did
+#: NOT pass — a partial admission, not a clean pass. TEST_PASS's branches 1/2 otherwise grab
+#: the WHOLE as the count, so left positive it reads as a pass of all N and, against a
+#: partially-red run, is falsely CONTRADICTED. Detected here so `_classify` can route every
+#: form negative.
 PARTIAL_RATIO = re.compile(
-    rf"\b(?P<passed>{_NUM})\s*(?:/|out\s+of|of)\s*(?P<whole>{_NUM})\s+"
+    rf"\b(?P<passed>{_NUM})\s*(?:/|out\s+of|of)\s*(?:the\s+)?(?P<whole>{_NUM})\s+"
     rf"(?:tests?\s+)?(?:pass(?:ing|ed|es)?|green)\b",
+    re.I,
+)
+
+#: Determiner scope directly preceding a pass phrase (REV-2): a negative determiner ("not
+#: all", "no", "none of") or a partial one ("some", "several", "most", "many", "a few",
+#: "only N", "hardly any", "nearly/almost all", "half") bounds the pass to a SUBSET or its
+#: complement — an admission that some tests did NOT pass, never a claim that the suite is
+#: green. TEST_PASS can begin at the embedded `tests pass` substring, so left unrecognized
+#: an honest "Not all tests pass." against a partially-red run classified positive and,
+#: carrying no corroborating count, was falsely CONTRADICTED. Anchored to end exactly where
+#: the TEST_PASS match starts: ADJACENCY is the attachment test, so a determiner elsewhere
+#: in the sentence ("Ran only pytest and all tests pass") never flips a genuine full-pass
+#: claim and the money case keeps accusing. `of`/`the` tails absorb partitives whose head
+#: TEST_PASS consumed ("Most of [the tests pass]", "Only 3 of [the 12 tests pass]").
+SCOPE_DETERMINER = re.compile(
+    rf"\b(?:not(?:\s+every)?|no|none|hardly\s+any|only(?:\s+{_NUM})?|just\s+{_NUM}|"
+    rf"some|several|most|many|(?:a\s+)?few|nearly|almost|half)"
+    rf"(?:\s+of)?(?:\s+the)?\s*$",
     re.I,
 )
 
@@ -271,7 +290,11 @@ def _classify(sentence: str) -> Claim | None:
         bool(TEST_NEG.search(TEST_NEG_EXEMPT.sub(" ", _pass_clause_to_end(sentence, m.start()))))
         if m else negated
     )
-    if m and not pass_negated:
+    # Determiner scope (REV-2): a negative/partial determiner attached directly to the
+    # pass phrase ("Not all/No/Some/Most/Only 3 … tests pass") is a partial or negative
+    # report and must never enter the positive branch — see SCOPE_DETERMINER.
+    det_scoped = bool(m) and bool(SCOPE_DETERMINER.search(sentence[: m.start()]))
+    if m and not pass_negated and not det_scoped:
         # A partial ratio ("12/15", spaced "12 / 15", verbal "12 of 15" / "12 out of 15") where
         # the whole exceeds the passed count is a PARTIAL result (some did not pass) — a failure
         # admission, not a clean pass. Left positive it could be asserted as a pass against a
@@ -297,7 +320,7 @@ def _classify(sentence: str) -> Claim | None:
         return c
     # TEST_FAIL on the exemption-STRIPPED residual: "0 failed." / "0 tests failed." are
     # zero-failure PASS statements, not failure claims.
-    if TEST_FAIL.search(exempt) or (m and pass_negated):
+    if TEST_FAIL.search(exempt) or (m and (pass_negated or det_scoped)):
         c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
         return c
 

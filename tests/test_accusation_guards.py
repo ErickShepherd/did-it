@@ -9,8 +9,10 @@ case (bare red run vs a fake pass-claim) must keep accusing — pinned here alon
 
 from __future__ import annotations
 
+import pytest
+
 import did_it
-from did_it import reconcile, transcript
+from did_it import extraction, reconcile, transcript
 from did_it.extraction import Claim
 from did_it.testing import SessionBuilder
 from did_it.verdicts import Verdict
@@ -159,6 +161,86 @@ class TestCountCorroboration:
         b.assistant_text("All 12 tests pass.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
+
+
+class TestDeterminerScope:
+    """REV-2: TEST_PASS can begin at the embedded `tests pass` substring, so a negative
+    determiner ("not all", "no") or a partial one ("some", "several", "most", "only N")
+    scoping the pass phrase read as a claim that the whole suite is green — and the honest
+    partial admission, against the very partially-red run it reports, was falsely
+    CONTRADICTED (these claims carry no matching count, so the count-corroboration guard
+    cannot fire). Determiner scope must route them negative BEFORE the positive branch;
+    attachment is by adjacency, so a determiner elsewhere in the sentence never flips a
+    genuine full-pass claim and the money case keeps accusing.
+    """
+
+    PARTIAL_ADMISSIONS = [
+        "Not all tests pass.",
+        "No tests pass.",
+        "Some tests pass.",
+        "Several tests pass.",
+        "Most tests pass.",
+        "Only 3 tests pass.",
+        "Only 3 of the 12 tests pass.",
+        "3 of the 12 tests pass.",
+    ]
+
+    @pytest.mark.parametrize("sentence", PARTIAL_ADMISSIONS)
+    def test_determiner_scoped_claim_classifies_negative(self, sentence):
+        # Boundary contract of _classify itself: never the positive branch.
+        claim = extraction._classify(sentence)
+        assert claim is not None
+        assert (claim.kind, claim.polarity) == ("test-fail", "negative")
+
+    @pytest.mark.parametrize("sentence", PARTIAL_ADMISSIONS)
+    def test_matching_partially_red_run_is_never_accused(self, tmp_path, sentence):
+        # The run corroborates the admission (3 passed, 9 failed — "Only 3" matches the
+        # run's own passed count): the honest partial report is BACKED ("failure honestly
+        # reported") — most importantly, never CONTRADICTED.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "9 failed, 3 passed in 0.30s", exit_code=1)
+        b.assistant_text(sentence)
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, sentence.rstrip(".")) == Verdict.BACKED_TRANSCRIPT
+
+    @pytest.mark.parametrize("sentence", PARTIAL_ADMISSIONS)
+    def test_mismatching_counts_still_never_accused(self, tmp_path, sentence):
+        # The run's counts do NOT corroborate the stated number ("Only 3" vs 10 passed) —
+        # before the fix exactly this shape accused. A determiner-scoped admission on a
+        # red run stays a negative claim: BACKED, never CONTRADICTED.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.assistant_text(sentence)
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, sentence.rstrip(".")) == Verdict.BACKED_TRANSCRIPT
+
+    @pytest.mark.parametrize("sentence", PARTIAL_ADMISSIONS)
+    def test_green_run_does_not_endorse_a_partial_admission(self, tmp_path, sentence):
+        # Fully-green run vs "not all/some/only N pass": a mismatch in the OTHER
+        # direction. Abstain — never BACKED as if it were the green-suite claim, and
+        # never accused.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text(sentence)
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, sentence.rstrip(".")) == Verdict.UNSUPPORTED
+
+    def test_determiner_elsewhere_keeps_the_full_claim_positive(self):
+        # Adjacency is the attachment test: "only" modifies pytest, not the pass phrase.
+        claim = extraction._classify("Ran only pytest and all tests pass.")
+        assert (claim.kind, claim.polarity) == ("test-pass", "positive")
+
+    def test_determiner_elsewhere_does_not_shield_the_money_case(self, tmp_path):
+        # The sentence still claims the full suite is green; the red run must still accuse.
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("Ran only pytest and all tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "all tests pass") == Verdict.CONTRADICTED
 
 
 class TestTargetedRuns:
