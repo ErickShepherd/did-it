@@ -13,14 +13,17 @@ Read this file before changing the repository.
   owner-ratified remediation charter for PIR-1/PIR-3/PIR-4 and ADJ-A/B/D/E/F (2026-07-16:
   PRE-1 executed — local `main` restored to `06b73ee`, remediation branch
   `remediate/l05-post-ralph-2026-07-16` cut at `d6d3dd3`; DECIDE-1..5 and PRE-3 recorded).
-  **PRE-2 is BLOCKED**: three harness guard gaps (`git branch -f` / `git update-ref` /
-  `git symbolic-ref` not denied — fix belongs in the external loop-guard harness) and the
-  driver does not exist yet. The loop is NOT authorized to launch; no merge, push, or branch
-  deletion is authorized.
+  **PRE-2 is CLOSED** (2026-07-16, commit `12913bf`, evidence in
+  [`docs/operations/l05-pre2-evidence-2026-07-16.md`](docs/operations/l05-pre2-evidence-2026-07-16.md)):
+  the earlier harness guard gaps were fixed and deployed in the external loop-guard harness
+  (`main@a77578e`), and the hardened driver now exists under `scripts/l05/`. **The loop has NOT
+  launched and still requires a separate explicit owner launch authorization**; no merge, push, or
+  branch deletion is authorized.
 - [`docs/reviews/2026-07-16-l05-charter-critique.md`](docs/reviews/2026-07-16-l05-charter-critique.md)
   is a same-session critique of charter v1 and the assessment (satisfies no gate). Charter v2
-  incorporates its bounded test-authorization, ordering, containment, and record-accuracy findings;
-  every owner decision and pre-loop gate remains unchecked.
+  incorporates its bounded test-authorization, ordering, containment, and record-accuracy findings.
+  Every owner decision and pre-loop gate was unchecked when the critique was written; all are now
+  resolved as recorded in the ledger (PRE-1/PRE-3/DECIDE-1..5 ratified, PRE-2 closed 2026-07-16).
 - [`docs/reviews/2026-07-16-post-ralph-inspection.md`](docs/reviews/2026-07-16-post-ralph-inspection.md)
   is the current acceptance state. It records four open findings discovered after the L0 Ralph
   loop; treat the prior sign-off as invalidated until they are independently reviewed.
