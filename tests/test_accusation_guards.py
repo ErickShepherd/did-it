@@ -641,10 +641,8 @@ class TestUnrecognizedScopeFailsClosed:
     STILL_ACCUSED = [
         "All tests pass.",
         "All 12 tests pass.",
-        "All unit tests pass.",
         "All pytest tests pass.",
         "Fixed the bug and all tests pass.",
-        "The plugin's tests pass.",
     ]
 
     @pytest.mark.parametrize("sentence", STILL_ACCUSED)
@@ -655,6 +653,21 @@ class TestUnrecognizedScopeFailsClosed:
         b.assistant_text(sentence)
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert any(r.verdict == Verdict.CONTRADICTED for r in receipts), sentence
+
+    SCOPE_NARROWED_UNSUPPORTED = [
+        "All unit tests pass.",
+        "The plugin's tests pass.",
+    ]
+
+    @pytest.mark.parametrize("sentence", SCOPE_NARROWED_UNSUPPORTED)
+    def test_scope_narrowed_claim_vs_generic_red_abstains(self, tmp_path, sentence):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 8 passed in 0.30s", exit_code=1)
+        b.assistant_text(sentence)
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert all(r.verdict != Verdict.CONTRADICTED for r in receipts), sentence
+        assert any(r.verdict == Verdict.UNSUPPORTED for r in receipts), sentence
 
 
 class TestReportingAttributionNeverAccused:

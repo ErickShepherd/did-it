@@ -369,3 +369,86 @@ class TestSummaryLinesCaching:
         assert classify_outcome(red)[0] == "red"
         assert classify_outcome(green)[0] == "green"
         assert classify_outcome(conflict)[0] == "ambiguous"
+
+
+class TestClaimScopeTokens:
+    """Unit tests for _claim_scope_tokens — narrowing token extraction."""
+
+    def test_generic_claim_has_no_scope_tokens(self):
+        from did_it.extraction import Claim
+        c = Claim(text="All tests pass.", utterance_index=0, tokens=[])
+        assert evidence._claim_scope_tokens(c) == []
+
+    def test_adjective_narrowing(self):
+        from did_it.extraction import Claim
+        c = Claim(text="All unit tests pass.", utterance_index=0, tokens=[])
+        assert "unit" in evidence._claim_scope_tokens(c)
+
+    def test_integration_adjective(self):
+        from did_it.extraction import Claim
+        c = Claim(text="All integration tests pass.", utterance_index=0, tokens=[])
+        assert "integration" in evidence._claim_scope_tokens(c)
+
+    def test_possessive_narrowing(self):
+        from did_it.extraction import Claim
+        c = Claim(text="The plugin's tests pass.", utterance_index=0, tokens=[])
+        assert "plugin" in evidence._claim_scope_tokens(c)
+
+    def test_file_token_narrowing(self):
+        from did_it.extraction import Claim
+        c = Claim(text="The test_repro.py tests pass.", utterance_index=0, tokens=["test_repro.py"])
+        assert "test_repro.py" in evidence._claim_scope_tokens(c)
+
+    def test_runner_family_not_narrowing(self):
+        from did_it.extraction import Claim
+        c = Claim(text="All pytest tests pass.", utterance_index=0, tokens=["pytest"])
+        tokens = evidence._claim_scope_tokens(c)
+        assert "pytest" not in tokens
+
+    def test_count_not_narrowing(self):
+        from did_it.extraction import Claim
+        c = Claim(text="All 12 tests pass.", utterance_index=0, tokens=[])
+        assert evidence._claim_scope_tokens(c) == []
+
+
+class TestRunCoversScope:
+    """Unit tests for _run_covers_scope — segment-level coverage check."""
+
+    def test_generic_run_does_not_cover_unit(self):
+        run = Run(index=0, command="pytest -q", exit_code=1,
+                  output="1 failed, 11 passed in 0.30s\n", ref="a", is_test_run=True)
+        assert not evidence._run_covers_scope(run, ["unit"])
+
+    def test_directory_targeted_run_covers_unit(self):
+        run = Run(index=0, command="pytest tests/unit/", exit_code=1,
+                  output="1 failed in 0.30s\n", ref="a", is_test_run=True)
+        assert evidence._run_covers_scope(run, ["unit"])
+
+    def test_failed_line_covers_file_token(self):
+        run = Run(index=0, command="pytest -q", exit_code=1,
+                  output="FAILED tests/test_repro.py::test_x\n1 failed in 0.30s\n",
+                  ref="a", is_test_run=True)
+        assert evidence._run_covers_scope(run, ["test_repro.py"])
+
+    def test_failed_line_different_file_does_not_cover(self):
+        run = Run(index=0, command="pytest -q", exit_code=1,
+                  output="FAILED tests/test_other.py::test_x\n1 failed in 0.30s\n",
+                  ref="a", is_test_run=True)
+        assert not evidence._run_covers_scope(run, ["test_repro.py"])
+
+    def test_failed_line_in_unit_dir_covers_unit(self):
+        run = Run(index=0, command="pytest -q", exit_code=1,
+                  output="FAILED tests/unit/test_foo.py::test_x\n1 failed in 0.30s\n",
+                  ref="a", is_test_run=True)
+        assert evidence._run_covers_scope(run, ["unit"])
+
+    def test_empty_scope_always_covered(self):
+        run = Run(index=0, command="pytest -q", exit_code=1,
+                  output="1 failed\n", ref="a", is_test_run=True)
+        assert evidence._run_covers_scope(run, [])
+
+    def test_substring_not_segment(self):
+        run = Run(index=0, command="pytest -q", exit_code=1,
+                  output="FAILED tests/unittest_helpers.py::test_x\n1 failed in 0.30s\n",
+                  ref="a", is_test_run=True)
+        assert not evidence._run_covers_scope(run, ["unit"])

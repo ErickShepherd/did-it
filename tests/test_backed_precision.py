@@ -807,3 +807,39 @@ class TestFileCreationEvidence:
             ("edit", "tests/config.py"),
             ("notebook-edit", "nb/run.ipynb"),
         ]
+
+
+class TestScopeNarrowedEndorsement:
+    """L05-01/ADJ-A: a generic green run must not endorse a scope-narrowed claim."""
+
+    def test_generic_green_does_not_endorse_file_scoped_claim(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("The test_nonexistent.py tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "test_nonexistent.py") == Verdict.UNSUPPORTED
+
+    def test_generic_green_does_not_endorse_adjective_scoped_claim(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("All unit tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "unit tests pass") == Verdict.UNSUPPORTED
+
+    def test_targeted_green_still_endorses_matching_file(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest tests/test_repro.py", "3 passed in 0.10s")
+        b.assistant_text("The test_repro.py tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "test_repro.py") == Verdict.BACKED_TRANSCRIPT
+
+    def test_directory_green_still_endorses_matching_scope(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest tests/unit/", "8 passed in 0.20s")
+        b.assistant_text("All unit tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "unit tests pass") == Verdict.BACKED_TRANSCRIPT

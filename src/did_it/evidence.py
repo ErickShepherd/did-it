@@ -524,6 +524,71 @@ _NON_SCOPE_FLAGS = frozenset({
 #: make every claim "name the target" and un-suppress the accusation (false CONTRADICTED).
 _GENERIC_TOKENS = frozenset({"test", "tests", "and", "or", "not"})
 
+_SCOPE_NARROWING_ADJ = frozenset({
+    "unit", "integration", "e2e", "end-to-end", "acceptance", "smoke", "regression",
+    "ui", "api", "frontend", "backend",
+})
+_SCOPE_ADJ_RE = re.compile(
+    r"\b(" + "|".join(re.escape(w) for w in sorted(_SCOPE_NARROWING_ADJ, key=len, reverse=True)) + r")\b",
+    re.I,
+)
+_POSSESSIVE_RE = re.compile(r"\b(\w+)(?:'|’)s\b")
+_POSSESSIVE_EXCLUDE = frozenset({
+    "it", "the", "my", "our", "their", "its", "your", "one", "that", "this",
+})
+
+
+def _claim_scope_tokens(claim) -> list[str]:  # noqa: ANN001
+    """Scope-narrowing tokens from a test-pass/test-fail claim's text.
+
+    Returns tokens that restrict the claim to a subset of the suite.
+    Empty means the claim is generic (applies to the whole suite).
+    """
+    tokens: list[str] = []
+    for m in _SCOPE_ADJ_RE.finditer(claim.text):
+        tokens.append(m.group(1).lower())
+    for m in _POSSESSIVE_RE.finditer(claim.text):
+        base = m.group(1).lower()
+        if base not in _POSSESSIVE_EXCLUDE:
+            tokens.append(base)
+    for t in claim.tokens:
+        if "/" in t or "." in t:
+            tokens.append(t.lower())
+    return tokens
+
+
+def _segment_match(token: str, text: str) -> bool:
+    """True if token appears as a path/node segment in text."""
+    token_lower = token.lower()
+    for segment in re.split(r"[/\s]+|::", text):
+        if segment.lower() == token_lower:
+            return True
+    return False
+
+
+def _run_covers_scope(run: Run, scope_tokens: list[str]) -> bool:
+    """True if the run's evidence covers ALL scope-narrowing tokens at segment level.
+
+    Coverage sources: the executed runner clause (command + path arguments) and
+    complete framework failure lines (FAILED/ERROR per-test paths).
+    """
+    if not scope_tokens:
+        return True
+    clause = _runner_clause(HEREDOC.sub(" ", run.command)) if _scan_bounded(run.command) else run.command
+    for token in scope_tokens:
+        if _segment_match(token, clause):
+            continue
+        covered = False
+        for m in FAILED_LINE.finditer(run.output):
+            line_end = run.output.find("\n", m.start())
+            line = run.output[m.start():line_end if line_end >= 0 else len(run.output)]
+            if _segment_match(token, line):
+                covered = True
+                break
+        if not covered:
+            return False
+    return True
+
 
 def summary_passed_count(run: Run) -> int | None:
     """Passed-count read off the framework's own summary line only (never echoed output)."""
@@ -710,6 +775,9 @@ def scope_mismatch(index: Index, claim, run: Run) -> str | None:  # noqa: ANN001
         return "the claim names a runner family that is not this run's"
     if len(families) > 1 and (fam is None or not _FAMILY_PATTERNS[fam].search(claim.text)):
         return "multiple test-runner families ran; the claim does not name this run's"
+    scope_tokens = _claim_scope_tokens(claim)
+    if scope_tokens and not _run_covers_scope(run, scope_tokens):
+        return "claim scope is narrower than run evidence"
     return None
 
 
