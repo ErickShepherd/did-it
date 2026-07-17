@@ -225,10 +225,7 @@ _DECIDE5_PREPOSITIONS = frozenset({
 _SCRIPT_EXTENSIONS = frozenset({
     ".py", ".sh", ".bash", ".zsh", ".js", ".mjs", ".ts", ".rb", ".pl",
 })
-_FILE_EXTENSIONS = _SCRIPT_EXTENSIONS | frozenset({
-    ".toml", ".cfg", ".ini", ".yaml", ".yml", ".json", ".xml",
-    ".html", ".txt", ".lock", ".md",
-})
+_OBJECT_PREPOSITIONS = frozenset({"on", "against", "over", "for", "across"})
 
 
 def _is_path_like(word: str) -> bool:
@@ -246,20 +243,17 @@ def _is_path_like(word: str) -> bool:
     return False
 
 
-def _is_file_object(word: str) -> bool:
-    """Broad file-object detection for the DECIDE-5 guard precondition.
+def _has_path_object(words_after_cmd: list[str], tokens: list[str]) -> bool:
+    """Position-based path-object detection for the DECIDE-5 guard precondition.
 
-    Broader than ``_is_path_like``: also recognizes non-script extensions
-    (``.toml``, ``.json``, …) and dotfiles (``.env``, ``.gitignore``).
+    True when the sentence has a token in the path-object position (following
+    ``on``/``against``/``over``/``for``/``across`` after the command word) or
+    any claim token contains ``/``.
     """
-    if "/" in word:
-        return True
-    if word.startswith("."):
-        return True
-    dot = word.rfind(".")
-    if dot > 0:
-        return word[dot:].lower() in _FILE_EXTENSIONS
-    return False
+    for i, w in enumerate(words_after_cmd):
+        if w.strip(".,;:!?'\"").lower() in _OBJECT_PREPOSITIONS and i + 1 < len(words_after_cmd):
+            return True
+    return any("/" in t for t in tokens if t)
 
 
 def _has_unrecognized_command(claim) -> bool:  # noqa: ANN001
@@ -272,13 +266,13 @@ def _has_unrecognized_command(claim) -> bool:  # noqa: ANN001
     m = ext.COMMAND_RAN.search(claim.text)
     if not m:
         return False
-    if not any(_is_file_object(t) for t in claim.tokens if t):
-        return False
     words = claim.text[m.end():].split()
     if not words:
         return False
     first = words[0].strip(".,;:!?'\"")
     if not first:
+        return False
+    if not _has_path_object(words[1:], claim.tokens):
         return False
     first_lower = first.lower()
     if _is_path_like(first.rstrip(".,;:!?")):

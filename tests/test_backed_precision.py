@@ -1124,6 +1124,131 @@ class TestNonScriptFileObjectDecide5:
         assert verdict_of(receipts, "migrate.py") == Verdict.BACKED_TRANSCRIPT
 
 
+class TestPositionBasedPathObject:
+    """L05-10 / GATE3-F1-residual: the DECIDE-5 guard detects the command's path object
+    by position (following on/against/over/for/across after the command word), not by
+    extension enumeration.  Source/data/compound extensions that were invisible to the
+    L05-08 allowlist now trigger the abstain."""
+
+    # -- Source/data/compound-extension false-endorsement regressions --
+
+    def test_go_source_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat main.go", "package main")
+        b.assistant_text("I ran coverage on main.go.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_rust_source_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat main.rs", "fn main() {}")
+        b.assistant_text("I ran coverage on main.rs.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_java_source_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat Main.java", "class Main {}")
+        b.assistant_text("I ran coverage on Main.java.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_c_source_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat hello.c", "int main() {}")
+        b.assistant_text("I ran coverage on hello.c.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_css_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat style.css", "body {}")
+        b.assistant_text("I ran coverage on style.css.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_sql_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat query.sql", "SELECT 1")
+        b.assistant_text("I ran coverage on query.sql.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_csv_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat data.csv", "a,b,c")
+        b.assistant_text("I ran coverage on data.csv.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_graphql_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat schema.graphql", "type Query {}")
+        b.assistant_text("I ran coverage on schema.graphql.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_proto_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat service.proto", "syntax = 'proto3';")
+        b.assistant_text("I ran coverage on service.proto.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_jsx_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat App.jsx", "export default App")
+        b.assistant_text("I ran coverage on App.jsx.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_tsx_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat App.tsx", "export default App")
+        b.assistant_text("I ran coverage on App.tsx.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_compound_extension_tar_gz_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat archive.tar.gz", "binary content")
+        b.assistant_text("I ran coverage on archive.tar.gz.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    # -- Version-suffixed command-name controls (L05-06/L05-07 not re-broken) --
+
+    def test_versioned_command_still_abstains_with_source_object(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat main.go", "package main")
+        b.assistant_text("I ran pylint3.11 on main.go.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran pylint3.11") == Verdict.UNSUPPORTED
+
+    def test_dotted_command_still_abstains_with_source_object(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat main.go", "package main")
+        b.assistant_text("I ran py.test on main.go.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran py.test") == Verdict.UNSUPPORTED
+
+    # -- Path-only carve-out controls (must still BACK) --
+
+    def test_path_only_with_slash_still_backs(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("python scripts/migrate.py --prod", "done")
+        b.assistant_text("Ran scripts/migrate.py against prod.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "scripts/migrate.py") == Verdict.BACKED_TRANSCRIPT
+
+    def test_path_only_bare_filename_still_backs(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("python migrate.py --prod", "done")
+        b.assistant_text("Ran migrate.py against prod.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "migrate.py") == Verdict.BACKED_TRANSCRIPT
+
+
 class TestFailOrientedQuantity:
     """L05-09 / GATE3-F2: fail-oriented quantity claims must be corroborated against the
     summary's FAILED count, mirroring L05-03's pass-side rules."""
