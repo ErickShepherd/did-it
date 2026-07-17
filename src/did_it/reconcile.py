@@ -178,6 +178,10 @@ _DECIDE5_PREPOSITIONS = frozenset({
 _SCRIPT_EXTENSIONS = frozenset({
     ".py", ".sh", ".bash", ".zsh", ".js", ".mjs", ".ts", ".rb", ".pl",
 })
+_FILE_EXTENSIONS = _SCRIPT_EXTENSIONS | frozenset({
+    ".toml", ".cfg", ".ini", ".yaml", ".yml", ".json", ".xml",
+    ".html", ".txt", ".lock", ".md",
+})
 
 
 def _is_path_like(word: str) -> bool:
@@ -195,6 +199,22 @@ def _is_path_like(word: str) -> bool:
     return False
 
 
+def _is_file_object(word: str) -> bool:
+    """Broad file-object detection for the DECIDE-5 guard precondition.
+
+    Broader than ``_is_path_like``: also recognizes non-script extensions
+    (``.toml``, ``.json``, …) and dotfiles (``.env``, ``.gitignore``).
+    """
+    if "/" in word:
+        return True
+    if word.startswith("."):
+        return True
+    dot = word.rfind(".")
+    if dot > 0:
+        return word[dot:].lower() in _FILE_EXTENSIONS
+    return False
+
+
 def _has_unrecognized_command(claim) -> bool:  # noqa: ANN001
     """L05-DECIDE-5: detect an unrecognized command-like word in a command-ran claim.
 
@@ -205,7 +225,7 @@ def _has_unrecognized_command(claim) -> bool:  # noqa: ANN001
     m = ext.COMMAND_RAN.search(claim.text)
     if not m:
         return False
-    if not any(_is_path_like(t) for t in claim.tokens if t):
+    if not any(_is_file_object(t) for t in claim.tokens if t):
         return False
     words = claim.text[m.end():].split()
     if not words:

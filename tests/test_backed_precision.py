@@ -1024,3 +1024,101 @@ class TestCoherentCommandBinding:
         b.assistant_text("pytest exited with code 1.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "pytest exited") == Verdict.BACKED_TRANSCRIPT
+
+
+class TestNonScriptFileObjectDecide5:
+    """L05-08 / GATE3-F1: the DECIDE-5 guard must recognize non-script file objects
+    (`.toml`, `.cfg`, `.json`, etc.) and dotfiles (`.env`, `.gitignore`) as path-like
+    in its precondition, so an unrecognized command + non-script filename abstains."""
+
+    # -- Non-script extension false-endorsement regressions --
+
+    def test_nonscript_toml_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat config.toml", "[tool]\nkey = val")
+        b.assistant_text("I ran coverage on config.toml.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_nonscript_cfg_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat setup.cfg", "[metadata]\nname = foo")
+        b.assistant_text("I ran coverage on setup.cfg.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_nonscript_yaml_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat app.yaml", "app:\n  name: foo")
+        b.assistant_text("I ran coverage on app.yaml.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_nonscript_json_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat schema.json", '{"type": "object"}')
+        b.assistant_text("I ran coverage on schema.json.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    # -- Dotfile false-endorsement regressions --
+
+    def test_dotfile_env_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat .env", "SECRET=val")
+        b.assistant_text("I ran coverage on .env.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_dotfile_gitignore_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat .gitignore", "*.pyc")
+        b.assistant_text("I ran coverage on .gitignore.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_dotfile_prettierrc_json_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat .prettierrc.json", '{"semi": true}')
+        b.assistant_text("I ran coverage on .prettierrc.json.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    # -- Version-suffixed command controls (L05-06/L05-07 not re-broken) --
+
+    def test_versioned_pylint311_still_abstains_with_nonscript_object(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat config.toml", "[tool]")
+        b.assistant_text("I ran pylint3.11 on config.toml.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran pylint3.11") == Verdict.UNSUPPORTED
+
+    def test_dotted_py_test_still_abstains_with_nonscript_object(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat config.toml", "[tool]")
+        b.assistant_text("I ran py.test on config.toml.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran py.test") == Verdict.UNSUPPORTED
+
+    def test_versioned_python311_still_abstains_with_nonscript_object(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("cat config.toml", "[tool]")
+        b.assistant_text("I ran python3.11 on config.toml.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran python3.11") == Verdict.UNSUPPORTED
+
+    # -- Path-only carve-out controls (must still BACK) --
+
+    def test_path_only_with_slash_still_backs(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("python scripts/migrate.py --prod", "done")
+        b.assistant_text("Ran scripts/migrate.py against prod.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "scripts/migrate.py") == Verdict.BACKED_TRANSCRIPT
+
+    def test_path_only_bare_filename_still_backs(self, tmp_path):
+        b = SessionBuilder()
+        b.bash("python migrate.py --prod", "done")
+        b.assistant_text("Ran migrate.py against prod.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "migrate.py") == Verdict.BACKED_TRANSCRIPT
