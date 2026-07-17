@@ -203,7 +203,8 @@ def _has_unrecognized_command(claim) -> bool:  # noqa: ANN001
         return False
     if first_lower in _DECIDE5_DETERMINERS or first_lower in _DECIDE5_PREPOSITIONS:
         return False
-    return bool(first.replace("-", "").replace("_", "").isalpha())
+    stripped = first.replace("-", "").replace("_", "")
+    return bool(stripped) and stripped.isalnum() and any(c.isalpha() for c in stripped)
 
 
 def _command_ran(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001

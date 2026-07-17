@@ -908,6 +908,38 @@ class TestCoherentCommandBinding:
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
 
+    def test_alphanumeric_unrecognized_tool_abstains_flake8(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat src/app.py", "print('hello')")
+        b.assistant_text("I ran flake8 on src/app.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran flake8") == Verdict.UNSUPPORTED
+
+    def test_alphanumeric_unrecognized_tool_abstains_bandit3(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat src/app.py", "print('hello')")
+        b.assistant_text("I ran bandit3 on src/app.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran bandit3") == Verdict.UNSUPPORTED
+
+    def test_alphanumeric_unrecognized_tool_abstains_2to3(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat src/app.py", "print('hello')")
+        b.assistant_text("I ran 2to3 on src/app.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran 2to3") == Verdict.UNSUPPORTED
+
+    def test_bare_digit_token_is_not_treated_as_command(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat src/app.py", "print('hello')")
+        b.assistant_text("I ran 42 on src/app.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran 42") == Verdict.BACKED_TRANSCRIPT
+
     # -- Genuine path-only controls (must stay BACKED) --
 
     def test_genuine_path_only_claim_still_backs(self, tmp_path):
