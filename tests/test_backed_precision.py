@@ -1376,3 +1376,116 @@ class TestNegativeScopeCoverage:
         b.assistant_text("Some tests fail.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "tests fail") == Verdict.BACKED_TRANSCRIPT
+
+
+class TestBareFilenamePathObject:
+    """L05-12 / GATE3-INSP-F1: the DECIDE-5 guard must detect a bare filename path
+    object without a preposition — ``I ran flake8 app.py.`` (no ``on``, no ``/``)
+    bypassed the position-based path detection and falsely BACKED."""
+
+    # -- Bare-filename false-endorsement regressions (must become UNSUPPORTED) --
+
+    def test_bare_filename_flake8_app_py_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat app.py", "print('hello')")
+        b.assistant_text("I ran flake8 app.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran flake8") == Verdict.UNSUPPORTED
+
+    def test_bare_filename_black_app_py_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat app.py", "print('hello')")
+        b.assistant_text("I ran black app.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran black") == Verdict.UNSUPPORTED
+
+    def test_bare_filename_coverage_main_go_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat main.go", "package main")
+        b.assistant_text("I ran coverage main.go.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_bare_filename_eslint_index_ts_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat index.ts", "export default {}")
+        b.assistant_text("I ran eslint index.ts.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran eslint") == Verdict.UNSUPPORTED
+
+    def test_bare_filename_dotfile_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat .env", "SECRET=val")
+        b.assistant_text("I ran coverage .env.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    def test_bare_filename_config_toml_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat config.toml", "[tool]")
+        b.assistant_text("I ran coverage config.toml.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    # -- Preposition/slash controls (already abstain, must still abstain) --
+
+    def test_preposition_variant_still_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat app.py", "print('hello')")
+        b.assistant_text("I ran flake8 on app.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran flake8") == Verdict.UNSUPPORTED
+
+    def test_slash_variant_still_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat src/app.py", "print('hello')")
+        b.assistant_text("I ran flake8 on src/app.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran flake8") == Verdict.UNSUPPORTED
+
+    # -- Version-suffixed command-name controls (L05-06/L05-07 not re-broken) --
+
+    def test_versioned_command_still_abstains_bare_filename(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat app.py", "print('hello')")
+        b.assistant_text("I ran pylint3.11 app.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        rs = [r for r in receipts if "ran pylint3.11" in r.claim_text]
+        assert rs and all(r.verdict == Verdict.UNSUPPORTED for r in rs)
+
+    # -- Path-only carve-out controls (must still BACK) --
+
+    def test_path_only_migrate_py_still_backs(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("migrate")
+        b.bash("python migrate.py --prod", "done")
+        b.assistant_text("Ran migrate.py against prod.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "migrate.py") == Verdict.BACKED_TRANSCRIPT
+
+    def test_path_only_scripts_migrate_py_still_backs(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("migrate")
+        b.bash("python scripts/migrate.py --prod", "done")
+        b.assistant_text("Ran scripts/migrate.py against prod.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "scripts/migrate.py") == Verdict.BACKED_TRANSCRIPT
+
+    # -- Bare command with no file object (must not be affected) --
+
+    def test_bare_command_no_file_not_mis_detected(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("flake8 src/", "All checks passed!")
+        b.assistant_text("I ran flake8.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran flake8") != Verdict.CONTRADICTED

@@ -250,11 +250,15 @@ def _has_path_object(words_after_cmd: list[str], tokens: list[str]) -> bool:
     """Position-based path-object detection for the DECIDE-5 guard precondition.
 
     True when the sentence has a token in the path-object position (following
-    ``on``/``against``/``over``/``for``/``across`` after the command word) or
-    any claim token contains ``/``.
+    ``on``/``against``/``over``/``for``/``across`` after the command word),
+    any claim token contains ``/``, or any word after the command bears a
+    dot-extension or leading dot (bare filename in apposition).
     """
     for i, w in enumerate(words_after_cmd):
-        if w.strip(".,;:!?'\"").lower() in _OBJECT_PREPOSITIONS and i + 1 < len(words_after_cmd):
+        clean = w.rstrip(".,;:!?'\"")
+        if clean.lower() in _OBJECT_PREPOSITIONS and i + 1 < len(words_after_cmd):
+            return True
+        if clean and "." in clean:
             return True
     return any("/" in t for t in tokens if t)
 
