@@ -644,6 +644,57 @@ class TestPartialQuantityCorroboration:
         assert r.verdict == Verdict.UNSUPPORTED
 
 
+class TestCoherentBindsCommand:
+    """L05-04: coherent_binds_command requires a recognized tool to bind via invocation;
+    path tokens alone never substitute for the tool."""
+
+    def test_tool_binds_when_invoked(self):
+        assert evidence.coherent_binds_command(["pytest"], "pytest -q")
+
+    def test_tool_does_not_bind_when_not_invoked(self):
+        assert not evidence.coherent_binds_command(["pytest"], "cat report.txt")
+
+    def test_tool_plus_path_binds_same_run(self):
+        assert evidence.coherent_binds_command(
+            ["pytest", "tests/test_foo.py"], "pytest tests/test_foo.py -q"
+        )
+
+    def test_tool_plus_path_fails_when_path_not_in_run(self):
+        assert not evidence.coherent_binds_command(
+            ["pytest", "tests/test_foo.py"], "pytest -q"
+        )
+
+    def test_path_alone_binds_existentially(self):
+        assert evidence.coherent_binds_command(["src/app.py"], "cat src/app.py")
+
+    def test_tool_in_argument_position_does_not_bind(self):
+        assert not evidence.coherent_binds_command(["pytest"], "pip install pytest")
+
+    def test_python_m_tool_binds(self):
+        assert evidence.coherent_binds_command(["pytest"], "python -m pytest -q")
+
+    def test_incidental_path_does_not_substitute_for_tool(self):
+        assert not evidence.coherent_binds_command(
+            ["pytest", "report.txt"], "cat report.txt"
+        )
+
+
+class TestIsToolToken:
+    """L05-04: _is_tool_token distinguishes recognized tool words from path tokens."""
+
+    def test_recognized_tools(self):
+        for t in ("pytest", "ruff", "mypy", "npm", "cargo", "git", "make", "tox"):
+            assert evidence._is_tool_token(t), t
+
+    def test_paths_are_not_tools(self):
+        for t in ("tests/test_foo.py", "src/app.py", "config.toml"):
+            assert not evidence._is_tool_token(t), t
+
+    def test_case_insensitive(self):
+        assert evidence._is_tool_token("PyTest")
+        assert evidence._is_tool_token("RUFF")
+
+
 class TestSummaryCleanCounts:
     """L05-DECIDE-3: summary_clean_counts only returns counts when passed and failed are
     the only test-outcome categories."""

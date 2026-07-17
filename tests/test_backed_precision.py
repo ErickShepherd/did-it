@@ -843,3 +843,120 @@ class TestScopeNarrowedEndorsement:
         b.assistant_text("All unit tests pass.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "unit tests pass") == Verdict.BACKED_TRANSCRIPT
+
+
+class TestCoherentCommandBinding:
+    """L05-04 / PIR-3 / ADJ-D / ADJ-E: when a claim names a recognized tool, incidental path
+    tokens must not substitute for the tool's invocation.  An unrecognized command-like word
+    plus a path (L05-DECIDE-5) abstains rather than degrading to path-only evidence."""
+
+    # -- PIR-3: false BACKED via incidental path binding --
+
+    def test_cat_path_does_not_back_a_pytest_exit_code_claim(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run checks")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.bash("cat report.txt", "some content")
+        b.assistant_text("pytest exited with code 0 after I inspected report.txt.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "pytest exited") == Verdict.UNSUPPORTED
+
+    def test_cat_path_does_not_back_a_ran_pytest_claim(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat tests/test_foo.py", "import pytest")
+        b.assistant_text("I ran pytest on tests/test_foo.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran pytest") == Verdict.UNSUPPORTED
+
+    def test_no_pytest_run_cat_path_does_not_back_exit_code(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat report.txt", "some content")
+        b.assistant_text("pytest exited with code 0 after I inspected report.txt.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "pytest exited") == Verdict.UNSUPPORTED
+
+    # -- ADJ-D: wrapper with path does not back a named-tool claim --
+
+    def test_wrapper_path_does_not_back_pytest_exit_code(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run checks")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.bash("./scripts/run_tests.sh tests/test_foo.py", "OK")
+        b.assistant_text("pytest exited with code 0 on tests/test_foo.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "pytest exited") == Verdict.UNSUPPORTED
+
+    # -- ADJ-E: module-invocation phrasing, same mechanism --
+
+    def test_cat_does_not_back_module_pytest_command_ran(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat src/app.py", "print('hello')")
+        b.assistant_text("I executed python -m pytest against src/app.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "executed python") == Verdict.UNSUPPORTED
+
+    # -- L05-DECIDE-5: unrecognized command-like word + path --
+
+    def test_unrecognized_tool_plus_path_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check coverage")
+        b.bash("cat src/app.py", "print('hello')")
+        b.assistant_text("I ran coverage on src/app.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran coverage") == Verdict.UNSUPPORTED
+
+    # -- Genuine path-only controls (must stay BACKED) --
+
+    def test_genuine_path_only_claim_still_backs(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("migrate")
+        b.bash("python scripts/migrate.py --prod", "done")
+        b.assistant_text("Ran scripts/migrate.py against prod.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "scripts/migrate.py") == Verdict.BACKED_TRANSCRIPT
+
+    # -- Genuine tool bindings (must stay BACKED) --
+
+    def test_genuine_pytest_run_still_backs_command_ran(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("verify")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("I ran pytest to verify.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran pytest") == Verdict.BACKED_TRANSCRIPT
+
+    def test_genuine_python_m_pytest_still_backs(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("verify")
+        b.bash("python -m pytest -q", "12 passed in 0.30s")
+        b.assistant_text("I ran pytest to verify.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran pytest") == Verdict.BACKED_TRANSCRIPT
+
+    def test_genuine_pytest_with_path_backs_when_path_in_command(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the repro")
+        b.bash("pytest tests/test_foo.py -q", "3 passed in 0.05s")
+        b.assistant_text("Ran pytest on tests/test_foo.py to confirm.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "Ran pytest") == Verdict.BACKED_TRANSCRIPT
+
+    def test_genuine_pytest_exit_code_still_backs(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run checks")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("pytest exited with code 0.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "pytest exited") == Verdict.BACKED_TRANSCRIPT
+
+    def test_exit_code_binds_tool_run_not_incidental_path_run(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run checks")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.bash("ruff check .", "All checks passed!")
+        b.assistant_text("pytest exited with code 1.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "pytest exited") == Verdict.BACKED_TRANSCRIPT

@@ -14,6 +14,7 @@ high-precision trigger). Rules, in order:
 from __future__ import annotations
 
 from . import evidence as ev
+from . import extraction as ext
 from .verdicts import Receipt, Verdict
 
 
@@ -168,23 +169,62 @@ def _named_check(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
     return _receipt(claim, Verdict.UNSUPPORTED, e, note=f"last '{tool_word}' run was not green")
 
 
+_DECIDE5_DETERMINERS = frozenset({
+    "the", "a", "an", "my", "our", "their", "its", "your", "this", "that",
+})
+_DECIDE5_PREPOSITIONS = frozenset({
+    "on", "against", "in", "at", "from", "with", "for", "to", "into",
+})
+
+
+def _has_unrecognized_command(claim) -> bool:  # noqa: ANN001
+    """L05-DECIDE-5: detect an unrecognized command-like word in a command-ran claim.
+
+    Only the FIRST word after the COMMAND_RAN verb is checked: a command name sits
+    in the direct command position ("ran coverage on X"), never after a determiner
+    ("installed the deps from X") or preposition ("ran on X").
+    """
+    m = ext.COMMAND_RAN.search(claim.text)
+    if not m:
+        return False
+    path_set = {t for t in claim.tokens if t and ("/" in t or "." in t)}
+    if not path_set:
+        return False
+    words = claim.text[m.end():].split()
+    if not words:
+        return False
+    first = words[0].strip(".,;:!?'\"")
+    if not first:
+        return False
+    first_lower = first.lower()
+    if first.rstrip(".,;:!?") in path_set:
+        return False
+    if first_lower in ev.TOOL_WORDS:
+        return False
+    if first_lower in _DECIDE5_DETERMINERS or first_lower in _DECIDE5_PREPOSITIONS:
+        return False
+    return bool(first.replace("-", "").replace("_", "").isalpha())
+
+
 def _command_ran(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
     tokens = [t for t in claim.tokens if len(t) >= 3]
+    has_tool = any(ev._is_tool_token(t) for t in tokens)
+    if not has_tool and tokens and _has_unrecognized_command(claim):
+        return _absent(claim, session,
+                       "claim names an unrecognized command plus a path")
     for run in reversed(index.runs_before(claim.utterance_index)):
-        # path tokens bind by quote-stripped substring; bare tool words must be actual
-        # invocations — `pip install pytest` never backs "I ran pytest"
-        if ev.binds_command(tokens, run.command):
-            e = ev.Evidence(tool="Bash", ref=run.ref, exit_code=run.exit_code,
-                            at_index=run.index, tier="witness")
-            if run.exit_code == 0:
-                return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e)
-            # it ran and FAILED: never an endorsement, never an accusation
-            return _receipt(claim, Verdict.UNSUPPORTED, e,
-                            note=f"matching command exited {run.exit_code}")
+        if has_tool:
+            if not ev.coherent_binds_command(tokens, run.command):
+                continue
+        elif not ev.binds_command(tokens, run.command):
+            continue
+        e = ev.Evidence(tool="Bash", ref=run.ref, exit_code=run.exit_code,
+                        at_index=run.index, tier="witness")
+        if run.exit_code == 0:
+            return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e)
+        return _receipt(claim, Verdict.UNSUPPORTED, e,
+                        note=f"matching command exited {run.exit_code}")
     if tokens:
-        # REV-8: name the unmatched command so a split conjunct's receipt says WHICH
-        # command never ran (per-command receipts). The tokenless wording below is the
-        # documented note (README example) and stays verbatim.
         return _absent(claim, session, f"no run matching '{', '.join(tokens)}' at utterance-time")
     return _absent(claim, session, "no matching command at utterance-time")
 
@@ -218,9 +258,16 @@ def _exit_code(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
     # REV-7: an exit-code claim binds to the run matching its named command tokens (the
     # same binding rules command-ran claims use), never to the last unrelated run —
     # "pytest exited with code 0." must not be endorsed by a later green ruff run.
+    # L05-04: when a recognized tool is named, bind by tool invocation only — path tokens
+    # from other sentence parts must not substitute for the tool.
     tokens = [t for t in claim.tokens if len(t) >= 3]
     if tokens:
-        matching = [r for r in runs if ev.binds_command(tokens, r.command)]
+        tool_tokens = [t for t in tokens if ev._is_tool_token(t)]
+        if tool_tokens:
+            matching = [r for r in runs
+                        if any(ev.runs_tool(r.command, t) for t in tool_tokens)]
+        else:
+            matching = [r for r in runs if ev.binds_command(tokens, r.command)]
         if not matching:
             return _absent(claim, session, "no run matching the claim's named command at utterance-time")
         run = matching[-1]

@@ -779,6 +779,35 @@ def binds_command(tokens: list[str], command: str) -> bool:
     return False
 
 
+TOOL_WORDS = frozenset({"pytest", "ruff", "mypy", "npm", "cargo", "git", "make", "tox"})
+
+
+def _is_tool_token(token: str) -> bool:
+    """True if the token is a recognized tool word from BIND_TOKEN's closed vocabulary."""
+    return "/" not in token and "." not in token and token.lower() in TOOL_WORDS
+
+
+def coherent_binds_command(tokens: list[str], command: str) -> bool:
+    """Coherent command binding: when a claim names a recognized tool, the tool
+    must bind via invocation semantics and path tokens must bind the same run.
+
+    Without a recognized tool token, delegates to the existential ``binds_command``.
+    """
+    if not _scan_bounded(command):
+        return False
+    tool_tokens = [t for t in tokens if t and _is_tool_token(t)]
+    if not tool_tokens:
+        return binds_command(tokens, command)
+    if not any(runs_tool(command, t) for t in tool_tokens):
+        return False
+    stripped = _stripped(command)
+    for t in tokens:
+        if t and not _is_tool_token(t) and ("/" in t or "." in t):
+            if not _binds_path(t, stripped):
+                return False
+    return True
+
+
 def scope_mismatch(index: Index, claim, run: Run) -> str | None:  # noqa: ANN001
     """Reason this run's SCOPE does not cover this claim, or None (the scopes match).
 
