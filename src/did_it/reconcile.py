@@ -175,6 +175,24 @@ _DECIDE5_DETERMINERS = frozenset({
 _DECIDE5_PREPOSITIONS = frozenset({
     "on", "against", "in", "at", "from", "with", "for", "to", "into",
 })
+_SCRIPT_EXTENSIONS = frozenset({
+    ".py", ".sh", ".bash", ".zsh", ".js", ".mjs", ".ts", ".rb", ".pl",
+})
+
+
+def _is_path_like(word: str) -> bool:
+    """True when the word looks like a filesystem path, not a command name.
+
+    A word with ``/`` is always a path.  A bare filename with a recognized
+    script extension (``.py``, ``.sh``, …) is a path.  Dotted version
+    suffixes (``pylint3.11``, ``py.test``) are NOT paths.
+    """
+    if "/" in word:
+        return True
+    dot = word.rfind(".")
+    if dot > 0:
+        return word[dot:].lower() in _SCRIPT_EXTENSIONS
+    return False
 
 
 def _has_unrecognized_command(claim) -> bool:  # noqa: ANN001
@@ -187,8 +205,7 @@ def _has_unrecognized_command(claim) -> bool:  # noqa: ANN001
     m = ext.COMMAND_RAN.search(claim.text)
     if not m:
         return False
-    path_set = {t for t in claim.tokens if t and ("/" in t or "." in t)}
-    if not path_set:
+    if not any(_is_path_like(t) for t in claim.tokens if t):
         return False
     words = claim.text[m.end():].split()
     if not words:
@@ -197,13 +214,13 @@ def _has_unrecognized_command(claim) -> bool:  # noqa: ANN001
     if not first:
         return False
     first_lower = first.lower()
-    if first.rstrip(".,;:!?") in path_set:
+    if _is_path_like(first.rstrip(".,;:!?")):
         return False
     if first_lower in ev.TOOL_WORDS:
         return False
     if first_lower in _DECIDE5_DETERMINERS or first_lower in _DECIDE5_PREPOSITIONS:
         return False
-    stripped = first.replace("-", "").replace("_", "")
+    stripped = first.replace("-", "").replace("_", "").replace(".", "")
     return bool(stripped) and stripped.isalnum() and any(c.isalpha() for c in stripped)
 
 

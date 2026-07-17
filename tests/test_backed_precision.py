@@ -932,6 +932,30 @@ class TestCoherentCommandBinding:
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "ran 2to3") == Verdict.UNSUPPORTED
 
+    def test_dotted_unrecognized_tool_abstains_pylint311(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat src/app.py", "print('hello')")
+        b.assistant_text("I ran pylint3.11 on src/app.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran pylint3.11") == Verdict.UNSUPPORTED
+
+    def test_dotted_unrecognized_tool_abstains_py_test(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat src/app.py", "print('hello')")
+        b.assistant_text("I ran py.test on src/app.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran py.test") == Verdict.UNSUPPORTED
+
+    def test_dotted_unrecognized_tool_abstains_python311(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("check")
+        b.bash("cat src/app.py", "print('hello')")
+        b.assistant_text("I ran python3.11 on src/app.py.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "ran python3.11") == Verdict.UNSUPPORTED
+
     def test_bare_digit_token_is_not_treated_as_command(self, tmp_path):
         b = SessionBuilder()
         b.user_text("check")
@@ -949,6 +973,14 @@ class TestCoherentCommandBinding:
         b.assistant_text("Ran scripts/migrate.py against prod.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "scripts/migrate.py") == Verdict.BACKED_TRANSCRIPT
+
+    def test_bare_filename_path_only_still_backs(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("migrate")
+        b.bash("python migrate.py --prod", "done")
+        b.assistant_text("Ran migrate.py against prod.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "migrate.py") == Verdict.BACKED_TRANSCRIPT
 
     # -- Genuine tool bindings (must stay BACKED) --
 
