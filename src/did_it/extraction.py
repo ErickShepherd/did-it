@@ -37,6 +37,7 @@ class Claim:
     quantity: str | None = None    # quantifier type for negative/partial claims:
     #   "some", "no", "most", "only", "ratio", "not_all", "not_quite_all", "vague"
     claimed_total: int | None = None  # for ratio claims: "3 of the 12" → 12
+    quantity_axis: str | None = None  # "pass" or "fail" — which summary count the quantity refers to
 
 
 # --- 2. process-narration filter (NOT-A-CLAIM) --------------------------------------
@@ -168,6 +169,12 @@ TEST_FAIL = re.compile(
 PARTIAL_RATIO = re.compile(
     rf"\b(?P<passed>{_NUM})\s*(?:/|out\s+of|of)\s*(?:the\s+)?(?P<whole>{_NUM})\s+"
     rf"(?:tests?\s+)?(?:pass(?:ing|ed|es)?|green)\b",
+    re.I,
+)
+
+FAIL_RATIO = re.compile(
+    rf"\b(?P<failed>{_NUM})\s*(?:/|out\s+of|of)\s*(?:the\s+)?(?P<whole>{_NUM})\s+"
+    rf"(?:tests?\s+)?(?:fail(?:ing|ed|s)?)\b",
     re.I,
 )
 
@@ -566,6 +573,7 @@ def _classify(sentence: str) -> Claim | None:
         ):
             c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
             c.quantity = "ratio"
+            c.quantity_axis = "pass"
             c.count = int(mp.group("passed").replace(",", ""))
             c.claimed_total = int(mp.group("whole").replace(",", ""))
             return c
@@ -589,6 +597,7 @@ def _classify(sentence: str) -> Claim | None:
         c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
         if det_scoped and m:
             c.quantity = _parse_quantity(sentence[:m.start()])
+            c.quantity_axis = "pass"
             if c.quantity == "only":
                 mn = _Q_ONLY_N.search(sentence[:m.start()])
                 if mn:
@@ -600,6 +609,24 @@ def _classify(sentence: str) -> Claim | None:
                             break
                 if c.count is None:
                     c.quantity = "vague"
+        elif not (m and pass_negated):
+            mfr = FAIL_RATIO.search(sentence)
+            if mfr:
+                c.quantity = "ratio"
+                c.quantity_axis = "fail"
+                c.count = int(mfr.group("failed").replace(",", ""))
+                c.claimed_total = int(mfr.group("whole").replace(",", ""))
+            else:
+                mf = TEST_FAIL.search(exempt)
+                if mf and SCOPE_DETERMINER.search(sentence[:mf.start()]):
+                    c.quantity = _parse_quantity(sentence[:mf.start()])
+                    c.quantity_axis = "fail"
+                    if c.quantity == "only":
+                        mn = _Q_ONLY_N.search(sentence)
+                        if mn:
+                            c.count = int(mn.group(1).replace(",", ""))
+                        if c.count is None:
+                            c.quantity = "vague"
         return c
 
     m = CHECK_PASS.search(sentence)

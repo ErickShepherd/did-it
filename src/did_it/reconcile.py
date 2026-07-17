@@ -87,6 +87,52 @@ def _check_quantity(claim, run: ev.Run) -> str | None:  # noqa: ANN001
     return None
 
 
+def _check_fail_quantity(claim, run: ev.Run) -> str | None:  # noqa: ANN001
+    """Reason this red run may NOT corroborate a fail-oriented quantitative claim, or None.
+
+    Mirrors ``_check_quantity`` but checks against the summary's FAILED count.
+    """
+    q = claim.quantity
+    if q == "vague":
+        return "vague quantifier cannot be corroborated"
+    if q in ("not_all", "not_quite_all"):
+        return None
+    failed = ev.summary_failed_count(run)
+    if q == "no":
+        if failed is None:
+            return "failed count missing from summary"
+        return None if failed == 0 else f"summary shows {failed} failed; 'no' requires failed == 0"
+    if q == "some":
+        if failed is None:
+            return "failed count missing from summary"
+        return None if failed > 0 else f"summary shows {failed} failed; 'some' requires failed > 0"
+    if q == "only":
+        if failed is None:
+            return "failed count missing from summary"
+        if claim.count is not None and failed == claim.count:
+            return None
+        return f"summary shows {failed} failed; claim says {claim.count}"
+    if q == "most":
+        clean = ev.summary_clean_counts(run)
+        if clean is None:
+            return "denominator ambiguous (non-passed/failed categories or missing counts)"
+        p, f = clean
+        total = p + f
+        if total > 0 and f > total / 2:
+            return None
+        return f"summary shows {f}/{total} failed; 'most' requires > half"
+    if q == "ratio":
+        clean = ev.summary_clean_counts(run)
+        if clean is None:
+            return "denominator ambiguous (non-passed/failed categories or missing counts)"
+        p, f = clean
+        total = p + f
+        if claim.count is not None and f == claim.count and claim.claimed_total is not None and total == claim.claimed_total:
+            return None
+        return f"summary shows {f}/{total} failed; claim says {claim.count}/{claim.claimed_total}"
+    return None
+
+
 def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
     e = ev.find_evidence(index, claim)
     if e is None:
@@ -115,7 +161,8 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
             if claim.quantity is not None:
                 run = _run_for(index, e)
                 if run is not None:
-                    unsup = _check_quantity(claim, run)
+                    checker = _check_fail_quantity if claim.quantity_axis == "fail" else _check_quantity
+                    unsup = checker(claim, run)
                     if unsup is not None:
                         return _receipt(claim, Verdict.UNSUPPORTED, e, note=unsup)
             return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e, note="failure honestly reported")

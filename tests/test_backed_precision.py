@@ -1122,3 +1122,78 @@ class TestNonScriptFileObjectDecide5:
         b.assistant_text("Ran migrate.py against prod.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "migrate.py") == Verdict.BACKED_TRANSCRIPT
+
+
+class TestFailOrientedQuantity:
+    """L05-09 / GATE3-F2: fail-oriented quantity claims must be corroborated against the
+    summary's FAILED count, mirroring L05-03's pass-side rules."""
+
+    # -- Mismatch false-endorsement regressions (must become UNSUPPORTED) --
+
+    def test_no_tests_fail_with_failures_is_unsupported(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("No tests fail.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "No tests fail") == Verdict.UNSUPPORTED
+
+    def test_none_of_the_tests_fail_with_failures_is_unsupported(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("None of the tests fail.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "None of the tests fail") == Verdict.UNSUPPORTED
+
+    def test_only_2_failed_with_3_failed_is_unsupported(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "3 failed, 9 passed in 0.30s", exit_code=1)
+        b.assistant_text("Only 2 tests failed.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "Only 2 tests failed") == Verdict.UNSUPPORTED
+
+    def test_ratio_fail_mismatch_is_unsupported(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("2 of 12 tests failed.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "2 of 12 tests failed") == Verdict.UNSUPPORTED
+
+    # -- Matching-count controls (must stay BACKED) --
+
+    def test_honest_bare_fail_count_stays_backed(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("1 test failed.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "1 test failed") == Verdict.BACKED_TRANSCRIPT
+
+    def test_only_2_failed_with_2_failed_stays_backed(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.assistant_text("Only 2 tests failed.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "Only 2 tests failed") == Verdict.BACKED_TRANSCRIPT
+
+    def test_ratio_fail_match_stays_backed(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.assistant_text("2 of 12 tests failed.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "2 of 12 tests failed") == Verdict.BACKED_TRANSCRIPT
+
+    # -- Green-run control (unchanged under L05-DECIDE-2) --
+
+    def test_no_tests_fail_on_green_run_stays_unsupported(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 passed in 0.30s")
+        b.assistant_text("No tests fail.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "No tests fail") == Verdict.UNSUPPORTED

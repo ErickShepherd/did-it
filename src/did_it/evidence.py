@@ -482,6 +482,7 @@ def find_evidence(index: Index, claim) -> Evidence | None:  # noqa: ANN001
 # none can weaken a clean accusation (bare red run, generic fake pass-claim, single family).
 
 _PASSED_N = re.compile(r"\b(\d[\d,]*)\s+passed\b")
+_FAILED_N = re.compile(r"\b(\d[\d,]*)\s+failed\b")
 
 #: Runner families for the cross-family guard. `make`/`ctest`/`tox`-style wrappers resolve
 #: to None and never count as a distinct family (unknown must not manufacture ambiguity).
@@ -594,6 +595,15 @@ def summary_passed_count(run: Run) -> int | None:
     """Passed-count read off the framework's own summary line only (never echoed output)."""
     for line in run._summary_lines:
         m = _PASSED_N.search(line)
+        if m:
+            return int(m.group(1).replace(",", ""))
+    return None
+
+
+def summary_failed_count(run: Run) -> int | None:
+    """Failed-count read off the framework's own summary line only (never echoed output)."""
+    for line in run._summary_lines:
+        m = _FAILED_N.search(line)
         if m:
             return int(m.group(1).replace(",", ""))
     return None
