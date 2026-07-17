@@ -163,6 +163,64 @@ class TestCountCorroboration:
         assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
 
 
+class TestScopedCountCapture:
+    """ADJ-B: ``N <scope adjective> tests pass`` forms must preserve ``count=N`` in
+    extraction, providing defense-in-depth against false accusations via the existing
+    count-corroboration guard — independent of L05-01's scope guard."""
+
+    SCOPED_FORMS = [
+        ("All 11 unit tests pass.", 11),
+        ("All 5 integration tests pass.", 5),
+        ("7 existing tests pass.", 7),
+        ("All 7 test_foo.py tests pass.", 7),
+        ("All 11 unit tests pass!", 11),
+        ("All 1,000 unit tests pass.", 1000),
+        ("Fixed the bug and all 11 unit tests pass.", 11),
+    ]
+
+    @pytest.mark.parametrize("sentence,expected_count", SCOPED_FORMS)
+    def test_scoped_count_is_extracted(self, sentence, expected_count):
+        c = extraction._classify(sentence)
+        assert c is not None and c.kind == "test-pass"
+        assert c.count == expected_count
+
+    def test_generic_count_still_extracted(self):
+        c = extraction._classify("All 12 tests pass.")
+        assert c is not None and c.count == 12
+
+    def test_no_count_when_absent(self):
+        c = extraction._classify("All unit tests pass.")
+        assert c is not None and c.count is None
+
+    def test_unrecognized_scope_adjective_fails_closed(self):
+        c = extraction._classify("All 3 plugin tests pass.")
+        assert c is None or c.kind != "test-pass"
+
+    def test_scoped_count_agreement_suppresses_false_accusation(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("All 11 unit tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+    def test_scoped_count_mismatch_with_generic_run_still_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "1 failed, 7 passed in 0.30s", exit_code=1)
+        b.assistant_text("All 11 unit tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.UNSUPPORTED
+
+    def test_generic_numbered_money_case_still_accuses(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "1 failed, 11 passed in 0.30s", exit_code=1)
+        b.assistant_text("All 12 tests pass.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests pass") == Verdict.CONTRADICTED
+
+
 class TestDeterminerScope:
     """REV-2: TEST_PASS can begin at the embedded `tests pass` substring, so a negative
     determiner ("not all", "no") or a partial one ("some", "several", "most", "only N")

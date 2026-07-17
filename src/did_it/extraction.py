@@ -255,6 +255,30 @@ def _whole_suite_framed(tail: str) -> bool:
         return False
     return True
 
+
+def _frame_count(tail: str) -> int | None:
+    """Extract the claimed count from a recognized whole-suite frame tail.
+
+    Follows the same tokenization as ``_whole_suite_framed``: clause-split, cut at the
+    last connective boundary word, then look for a digit token in the determiner position
+    (after ``all``/``the``/nothing).  Returns None when no count is present.
+    """
+    toks = [t.lower() for t in _FRAME_CLAUSE_SPLIT.split(tail)[-1].split()]
+    for i in range(len(toks) - 1, -1, -1):
+        if toks[i] in _FRAME_BOUNDARY:
+            toks = toks[i + 1:]
+            break
+    idx = 0
+    n = len(toks)
+    if idx < n and toks[idx] == "all":
+        idx += 1
+    elif idx < n and toks[idx] in _FRAME_DETS:
+        idx += 1
+    if idx < n and toks[idx].replace(",", "").isdigit():
+        return int(toks[idx].replace(",", ""))
+    return None
+
+
 #: Conditional subordinators judged over the pass phrase's OWN clause (REV-3): the lead-only
 #: CONDITIONAL_LEAD missed a NON-LEADING condition — "All tests pass if the database is
 #: running." classified as an endorsed pass and, against a red run, was falsely CONTRADICTED.
@@ -521,6 +545,8 @@ def _classify(sentence: str) -> Claim | None:
             m2 = COUNT_FALLBACK.search(sentence)
             if m2:
                 c.count = int(m2.group(1).replace(",", ""))
+        if c.count is None:
+            c.count = _frame_count(sentence[:m.start()])
         return c
     # TEST_FAIL on the exemption-STRIPPED residual: "0 failed." / "0 tests failed." are
     # zero-failure PASS statements, not failure claims.

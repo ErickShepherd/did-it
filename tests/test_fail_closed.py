@@ -821,3 +821,7 @@ class TestFrameGateLinearAndFailClosed:
         # The target-token path the tokenizer must keep: a real test-file scope.
         c = extraction._classify("The test_repro.py tests pass.")
         assert c is not None and c.kind == "test-pass"
+
+    def test_scoped_count_extraction_contract(self):
+        c = extraction._classify("All 11 unit tests pass.")
+        assert c is not None and c.kind == "test-pass" and c.count == 11
