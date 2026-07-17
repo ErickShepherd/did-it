@@ -1322,3 +1322,57 @@ class TestFailOrientedQuantity:
         b.assistant_text("No tests fail.")
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
         assert verdict_of(receipts, "No tests fail") == Verdict.UNSUPPORTED
+
+
+class TestNegativeScopeCoverage:
+    """L05-11 / GATE3-negative-scope: scoped negative/partial claims must check scope
+    coverage, exactly as the positive path does — a generic run that doesn't cover the
+    claim's narrowing scope abstains (UNSUPPORTED)."""
+
+    # -- Scoped-negative false-endorsement regressions (must become UNSUPPORTED) --
+
+    def test_scoped_some_fail_on_generic_run_is_unsupported(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "3 failed, 9 passed in 0.30s", exit_code=1)
+        b.assistant_text("Some unit tests fail.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "unit tests fail") == Verdict.UNSUPPORTED
+
+    def test_scoped_only_N_failed_on_generic_run_is_unsupported(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "3 failed, 9 passed in 0.30s", exit_code=1)
+        b.assistant_text("Only 2 unit tests failed.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "unit tests failed") == Verdict.UNSUPPORTED
+
+    # -- Covered-scope control (must stay BACKED) --
+
+    def test_scoped_neg_with_covering_run_stays_backed(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest tests/unit/", "3 failed, 9 passed in 0.30s", exit_code=1)
+        b.assistant_text("Some unit tests fail.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "unit tests fail") == Verdict.BACKED_TRANSCRIPT
+
+    def test_scoped_neg_with_failed_line_covering_scope_stays_backed(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q",
+               "FAILED tests/unit/test_foo.py::test_bar\n3 failed, 9 passed in 0.30s",
+               exit_code=1)
+        b.assistant_text("Some unit tests fail.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "unit tests fail") == Verdict.BACKED_TRANSCRIPT
+
+    # -- Unscoped control (must stay BACKED, unchanged) --
+
+    def test_unscoped_neg_on_generic_run_stays_backed(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "3 failed, 9 passed in 0.30s", exit_code=1)
+        b.assistant_text("Some tests fail.")
+        receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert verdict_of(receipts, "tests fail") == Verdict.BACKED_TRANSCRIPT

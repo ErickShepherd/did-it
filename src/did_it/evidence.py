@@ -553,7 +553,7 @@ def _claim_scope_tokens(claim) -> list[str]:  # noqa: ANN001
         if base not in _POSSESSIVE_EXCLUDE:
             tokens.append(base)
     for t in claim.tokens:
-        if "/" in t or "." in t:
+        if ("/" in t or "." in t) and any(c.isalpha() for c in t):
             tokens.append(t.lower())
     return tokens
 

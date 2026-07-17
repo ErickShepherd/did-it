@@ -158,13 +158,16 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
         return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e, note=e.note)
     if claim.polarity == "negative":
         if e.outcome == "red":
-            if claim.quantity is not None:
-                run = _run_for(index, e)
-                if run is not None:
+            run = _run_for(index, e)
+            if run is not None:
+                if claim.quantity is not None:
                     checker = _check_fail_quantity if claim.quantity_axis == "fail" else _check_quantity
                     unsup = checker(claim, run)
                     if unsup is not None:
                         return _receipt(claim, Verdict.UNSUPPORTED, e, note=unsup)
+                mismatch = ev.scope_mismatch(index, claim, run)
+                if mismatch:
+                    return _receipt(claim, Verdict.UNSUPPORTED, e, note=mismatch)
             return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e, note="failure honestly reported")
         return _receipt(claim, Verdict.UNSUPPORTED, e, note=e.note)
     if e.outcome == "red":
