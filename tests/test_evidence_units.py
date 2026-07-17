@@ -452,3 +452,228 @@ class TestRunCoversScope:
                   output="FAILED tests/unittest_helpers.py::test_x\n1 failed in 0.30s\n",
                   ref="a", is_test_run=True)
         assert not evidence._run_covers_scope(run, ["unit"])
+
+
+class TestQuantityExtraction:
+    """L05-03: quantity metadata on determiner-scoped and ratio claims."""
+
+    def test_some_quantity(self):
+        from did_it.extraction import _classify
+        c = _classify("Some tests pass.")
+        assert c is not None and c.quantity == "some"
+
+    def test_no_quantity(self):
+        from did_it.extraction import _classify
+        c = _classify("No tests pass.")
+        assert c is not None and c.quantity == "no"
+
+    def test_most_quantity(self):
+        from did_it.extraction import _classify
+        c = _classify("Most tests pass.")
+        assert c is not None and c.quantity == "most"
+
+    def test_only_n_quantity_and_count(self):
+        from did_it.extraction import _classify
+        c = _classify("Only 3 tests pass.")
+        assert c is not None and c.quantity == "only" and c.count == 3
+
+    def test_ratio_quantity_and_counts(self):
+        from did_it.extraction import _classify
+        c = _classify("3 of the 12 tests pass.")
+        assert c is not None and c.quantity == "ratio"
+        assert c.count == 3 and c.claimed_total == 12
+
+    def test_not_all_quantity(self):
+        from did_it.extraction import _classify
+        c = _classify("Not all tests pass.")
+        assert c is not None and c.quantity == "not_all"
+
+    def test_not_quite_all_quantity(self):
+        from did_it.extraction import _classify
+        c = _classify("Not quite all tests pass.")
+        assert c is not None and c.quantity == "not_quite_all"
+
+    def test_vague_quantifiers(self):
+        from did_it.extraction import _classify
+        for s in ("Several tests pass.", "Barely any tests pass.",
+                  "A couple of tests pass.", "A handful of tests pass."):
+            c = _classify(s)
+            assert c is not None and c.quantity == "vague", s
+
+    def test_nearly_almost_are_vague(self):
+        from did_it.extraction import _classify
+        for s in ("Nearly all tests pass.", "Almost all tests pass."):
+            c = _classify(s)
+            assert c is not None and c.quantity == "vague", s
+
+    def test_positive_claim_has_no_quantity(self):
+        from did_it.extraction import _classify
+        c = _classify("All tests pass.")
+        assert c is not None and c.quantity is None
+
+
+class TestPartialQuantityCorroboration:
+    """L05-03 / PIR-4 / ADJ-F: red runs must not endorse quantitatively false partial claims."""
+
+    def test_some_requires_passed_gt_zero(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 0 passed in 0.30s", exit_code=1)
+        b.assistant_text("Some tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.UNSUPPORTED
+
+    def test_some_backed_when_passed_gt_zero(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "9 failed, 3 passed in 0.30s", exit_code=1)
+        b.assistant_text("Some tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.BACKED_TRANSCRIPT
+
+    def test_no_requires_passed_eq_zero(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.assistant_text("No tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.UNSUPPORTED
+
+    def test_no_backed_when_passed_eq_zero(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 0 passed in 0.30s", exit_code=1)
+        b.assistant_text("No tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.BACKED_TRANSCRIPT
+
+    def test_most_requires_majority(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "9 failed, 3 passed in 0.30s", exit_code=1)
+        b.assistant_text("Most tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.UNSUPPORTED
+
+    def test_most_backed_when_majority(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.assistant_text("Most tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.BACKED_TRANSCRIPT
+
+    def test_most_ambiguous_denominator_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 10 passed, 3 skipped in 0.30s", exit_code=1)
+        b.assistant_text("Most tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.UNSUPPORTED
+
+    def test_only_n_requires_exact_count(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.assistant_text("Only 3 tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.UNSUPPORTED
+
+    def test_only_n_backed_when_count_matches(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "9 failed, 3 passed in 0.30s", exit_code=1)
+        b.assistant_text("Only 3 tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.BACKED_TRANSCRIPT
+
+    def test_ratio_requires_exact_agreement(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "12 failed, 0 passed in 0.30s", exit_code=1)
+        b.assistant_text("3 of the 12 tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.UNSUPPORTED
+
+    def test_ratio_backed_when_exact(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "9 failed, 3 passed in 0.30s", exit_code=1)
+        b.assistant_text("3 of the 12 tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.BACKED_TRANSCRIPT
+
+    def test_nearly_all_is_vague_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "99 failed, 1 passed in 0.30s", exit_code=1)
+        b.assistant_text("Nearly all tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.UNSUPPORTED
+
+    def test_almost_all_is_vague_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "99 failed, 1 passed in 0.30s", exit_code=1)
+        b.assistant_text("Almost all tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.UNSUPPORTED
+
+    def test_not_all_backed_on_red(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.assistant_text("Not all tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.BACKED_TRANSCRIPT
+
+    def test_not_quite_all_backed_on_red(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
+        b.assistant_text("Not quite all tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.BACKED_TRANSCRIPT
+
+    def test_missing_passed_count_abstains(self, tmp_path):
+        b = SessionBuilder()
+        b.user_text("run the tests")
+        b.bash("pytest -q", "2 failed in 0.30s", exit_code=1)
+        b.assistant_text("Some tests pass.")
+        (r,) = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
+        assert r.verdict == Verdict.UNSUPPORTED
+
+
+class TestSummaryCleanCounts:
+    """L05-DECIDE-3: summary_clean_counts only returns counts when passed and failed are
+    the only test-outcome categories."""
+
+    def test_clean_summary(self):
+        run = Run(index=0, command="pytest", exit_code=1,
+                  output="9 failed, 3 passed in 0.30s\n", ref="a", is_test_run=True)
+        assert evidence.summary_clean_counts(run) == (3, 9)
+
+    def test_skipped_makes_ambiguous(self):
+        run = Run(index=0, command="pytest", exit_code=1,
+                  output="2 failed, 10 passed, 3 skipped in 0.30s\n", ref="a", is_test_run=True)
+        assert evidence.summary_clean_counts(run) is None
+
+    def test_errors_make_ambiguous(self):
+        run = Run(index=0, command="pytest", exit_code=1,
+                  output="2 failed, 10 passed, 1 error in 0.30s\n", ref="a", is_test_run=True)
+        assert evidence.summary_clean_counts(run) is None
+
+    def test_warnings_ignored(self):
+        run = Run(index=0, command="pytest", exit_code=1,
+                  output="2 failed, 10 passed, 5 warnings in 0.30s\n", ref="a", is_test_run=True)
+        assert evidence.summary_clean_counts(run) == (10, 2)
+
+    def test_no_summary_returns_none(self):
+        run = Run(index=0, command="pytest", exit_code=1,
+                  output="FAILED tests/test_foo.py::test_x\n", ref="a", is_test_run=True)
+        assert evidence.summary_clean_counts(run) is None
+
+    def test_missing_passed_returns_none(self):
+        run = Run(index=0, command="pytest", exit_code=1,
+                  output="2 failed in 0.30s\n", ref="a", is_test_run=True)
+        assert evidence.summary_clean_counts(run) is None

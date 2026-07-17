@@ -599,6 +599,38 @@ def summary_passed_count(run: Run) -> int | None:
     return None
 
 
+_SUMMARY_CATEGORY = re.compile(
+    r"\b(\d[\d,]*)\s+(passed|failed|errors?|skipped|warnings?|deselected|xfailed|xpassed|selected)\b",
+    re.I,
+)
+_CLEAN_RESULT_CATS = frozenset({"passed", "failed"})
+
+
+def summary_clean_counts(run: Run) -> tuple[int, int] | None:
+    """(passed, failed) when the summary has ONLY passed and failed categories (L05-DECIDE-3).
+
+    Returns None when any additional test-outcome category is present (skipped, errors,
+    xfail/xpass, etc.) or when either count is missing from the summary.
+    """
+    for line in run._summary_lines:
+        cats: dict[str, int] = {}
+        for m in _SUMMARY_CATEGORY.finditer(line):
+            cat = m.group(2).lower()
+            if cat.startswith("error"):
+                cat = "errors"
+            elif cat.startswith("warning"):
+                cat = "warnings"
+            cats[cat] = int(m.group(1).replace(",", ""))
+        if cats:
+            cats.pop("warnings", None)
+            if set(cats.keys()) - _CLEAN_RESULT_CATS:
+                return None
+            if "passed" in cats and "failed" in cats:
+                return (cats["passed"], cats["failed"])
+            return None
+    return None
+
+
 def runner_family(command: str) -> str | None:
     """Family of the command's EXECUTED runner clause(s), or None (unknown/ambiguous).
 

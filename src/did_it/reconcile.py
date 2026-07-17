@@ -39,6 +39,53 @@ def _absent(claim, session, note: str) -> Receipt:  # noqa: ANN001
     return _receipt(claim, Verdict.UNSUPPORTED, note=note)
 
 
+def _check_quantity(claim, run: ev.Run) -> str | None:  # noqa: ANN001
+    """Reason this red run may NOT corroborate a quantitative negative claim, or None.
+
+    Returns a note string when the claim's quantifier contradicts the run's summary
+    (-> UNSUPPORTED); None when the quantity is corroborated (-> fall through to BACKED).
+    """
+    q = claim.quantity
+    if q == "vague":
+        return "vague quantifier cannot be corroborated"
+    if q in ("not_all", "not_quite_all"):
+        return None
+    passed = ev.summary_passed_count(run)
+    if q == "some":
+        if passed is None:
+            return "passed count missing from summary"
+        return None if passed > 0 else f"summary shows {passed} passed; 'some' requires passed > 0"
+    if q == "no":
+        if passed is None:
+            return "passed count missing from summary"
+        return None if passed == 0 else f"summary shows {passed} passed; 'no' requires passed == 0"
+    if q == "only":
+        if passed is None:
+            return "passed count missing from summary"
+        if claim.count is not None and passed == claim.count:
+            return None
+        return f"summary shows {passed} passed; claim says {claim.count}"
+    if q == "most":
+        clean = ev.summary_clean_counts(run)
+        if clean is None:
+            return "denominator ambiguous (non-passed/failed categories or missing counts)"
+        p, f = clean
+        total = p + f
+        if total > 0 and p > total / 2:
+            return None
+        return f"summary shows {p}/{total}; 'most' requires > half"
+    if q == "ratio":
+        clean = ev.summary_clean_counts(run)
+        if clean is None:
+            return "denominator ambiguous (non-passed/failed categories or missing counts)"
+        p, f = clean
+        total = p + f
+        if claim.count is not None and p == claim.count and claim.claimed_total is not None and total == claim.claimed_total:
+            return None
+        return f"summary shows {p}/{total}; claim says {claim.count}/{claim.claimed_total}"
+    return None
+
+
 def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
     e = ev.find_evidence(index, claim)
     if e is None:
@@ -64,6 +111,12 @@ def _test_outcome(claim, session, index: ev.Index) -> Receipt:  # noqa: ANN001
         return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e, note=e.note)
     if claim.polarity == "negative":
         if e.outcome == "red":
+            if claim.quantity is not None:
+                run = _run_for(index, e)
+                if run is not None:
+                    unsup = _check_quantity(claim, run)
+                    if unsup is not None:
+                        return _receipt(claim, Verdict.UNSUPPORTED, e, note=unsup)
             return _receipt(claim, Verdict.BACKED_TRANSCRIPT, e, note="failure honestly reported")
         return _receipt(claim, Verdict.UNSUPPORTED, e, note=e.note)
     if e.outcome == "red":

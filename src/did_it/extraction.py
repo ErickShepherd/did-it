@@ -34,6 +34,9 @@ class Claim:
     polarity: str = "positive"     # "negative" for failure-reports ("2 tests still fail")
     count: int | None = None       # claimed test count, when stated ("all 12 tests pass")
     tokens: list[str] = field(default_factory=list)  # binding tokens (paths, tool words)
+    quantity: str | None = None    # quantifier type for negative/partial claims:
+    #   "some", "no", "most", "only", "ratio", "not_all", "not_quite_all", "vague"
+    claimed_total: int | None = None  # for ratio claims: "3 of the 12" → 12
 
 
 # --- 2. process-narration filter (NOT-A-CLAIM) --------------------------------------
@@ -188,6 +191,35 @@ SCOPE_DETERMINER = re.compile(
     rf"(?:\s+of)?(?:\s+the)?\s*$",
     re.I,
 )
+
+_Q_NOT_QUITE = re.compile(r"\bnot\s+quite\b", re.I)
+_Q_NO = re.compile(r"\b(?:no|none)\b", re.I)
+_Q_SOME = re.compile(r"\bsome\b", re.I)
+_Q_MOST = re.compile(r"\bmost\b", re.I)
+_Q_ONLY_N = re.compile(rf"\b(?:only|just)\s+({_NUM})\b", re.I)
+_Q_ONLY_BARE = re.compile(r"\b(?:only|just)\b", re.I)
+
+
+def _parse_quantity(det_prefix: str) -> str:
+    """Classify the quantifier from the determiner prefix before a pass phrase."""
+    if _Q_NOT_QUITE.search(det_prefix):
+        return "not_quite_all"
+    if _Q_NO.search(det_prefix):
+        if re.search(r"\bnot\b", det_prefix, re.I):
+            return "not_all"
+        return "no"
+    if re.search(r"\bnot\b", det_prefix, re.I):
+        return "not_all"
+    if _Q_SOME.search(det_prefix):
+        return "some"
+    if _Q_MOST.search(det_prefix):
+        return "most"
+    if _Q_ONLY_N.search(det_prefix):
+        return "only"
+    if _Q_ONLY_BARE.search(det_prefix):
+        return "only"
+    return "vague"
+
 
 #: Whole-suite frame required for the POSITIVE branch (2026-07-16 falsifier pass): the
 #: subset-determiner denylist above cannot enumerate English ("the majority of", "the
@@ -533,6 +565,9 @@ def _classify(sentence: str) -> Claim | None:
             int(mp.group("whole").replace(",", "")) > int(mp.group("passed").replace(",", ""))
         ):
             c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
+            c.quantity = "ratio"
+            c.count = int(mp.group("passed").replace(",", ""))
+            c.claimed_total = int(mp.group("whole").replace(",", ""))
             return c
     if m and not pass_negated and not det_scoped and framed:
         c.kind, c.is_procedural = "test-pass", True
@@ -552,6 +587,19 @@ def _classify(sentence: str) -> Claim | None:
     # zero-failure PASS statements, not failure claims.
     if TEST_FAIL.search(exempt) or (m and (pass_negated or det_scoped)):
         c.kind, c.is_procedural, c.polarity = "test-fail", True, "negative"
+        if det_scoped and m:
+            c.quantity = _parse_quantity(sentence[:m.start()])
+            if c.quantity == "only":
+                mn = _Q_ONLY_N.search(sentence[:m.start()])
+                if mn:
+                    c.count = int(mn.group(1).replace(",", ""))
+                else:
+                    for g in ("count1", "count2", "count3", "count4"):
+                        if m.group(g):
+                            c.count = int(m.group(g).replace(",", ""))
+                            break
+                if c.count is None:
+                    c.quantity = "vague"
         return c
 
     m = CHECK_PASS.search(sentence)

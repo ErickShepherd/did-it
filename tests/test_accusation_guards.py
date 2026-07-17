@@ -257,29 +257,59 @@ class TestDeterminerScope:
         assert claim is not None
         assert (claim.kind, claim.polarity) == ("test-fail", "negative")
 
-    @pytest.mark.parametrize("sentence", PARTIAL_ADMISSIONS)
-    def test_matching_partially_red_run_is_never_accused(self, tmp_path, sentence):
-        # The run corroborates the admission (3 passed, 9 failed — "Only 3" matches the
-        # run's own passed count): the honest partial report is BACKED ("failure honestly
-        # reported") — most importantly, never CONTRADICTED.
+    MATCHING_RED_EXPECTED = [
+        ("Not all tests pass.", Verdict.BACKED_TRANSCRIPT),
+        ("No tests pass.", Verdict.UNSUPPORTED),
+        ("Some tests pass.", Verdict.BACKED_TRANSCRIPT),
+        ("Several tests pass.", Verdict.UNSUPPORTED),
+        ("Most tests pass.", Verdict.UNSUPPORTED),
+        ("Only 3 tests pass.", Verdict.BACKED_TRANSCRIPT),
+        ("Only 3 of the 12 tests pass.", Verdict.BACKED_TRANSCRIPT),
+        ("3 of the 12 tests pass.", Verdict.BACKED_TRANSCRIPT),
+        ("Not quite all tests pass.", Verdict.BACKED_TRANSCRIPT),
+        ("Barely any tests pass.", Verdict.UNSUPPORTED),
+        ("Scarcely any tests pass.", Verdict.UNSUPPORTED),
+        ("A couple of tests pass.", Verdict.UNSUPPORTED),
+        ("A handful of tests pass.", Verdict.UNSUPPORTED),
+    ]
+
+    @pytest.mark.parametrize("sentence,expected", MATCHING_RED_EXPECTED)
+    def test_matching_partially_red_run_is_never_accused(self, tmp_path, sentence, expected):
         b = SessionBuilder()
         b.user_text("run the tests")
         b.bash("pytest -q", "9 failed, 3 passed in 0.30s", exit_code=1)
         b.assistant_text(sentence)
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
-        assert verdict_of(receipts, sentence.rstrip(".")) == Verdict.BACKED_TRANSCRIPT
+        v = verdict_of(receipts, sentence.rstrip("."))
+        assert v == expected
+        assert v != Verdict.CONTRADICTED
 
-    @pytest.mark.parametrize("sentence", PARTIAL_ADMISSIONS)
-    def test_mismatching_counts_still_never_accused(self, tmp_path, sentence):
-        # The run's counts do NOT corroborate the stated number ("Only 3" vs 10 passed) —
-        # before the fix exactly this shape accused. A determiner-scoped admission on a
-        # red run stays a negative claim: BACKED, never CONTRADICTED.
+    MISMATCHING_RED_EXPECTED = [
+        ("Not all tests pass.", Verdict.BACKED_TRANSCRIPT),
+        ("No tests pass.", Verdict.UNSUPPORTED),
+        ("Some tests pass.", Verdict.BACKED_TRANSCRIPT),
+        ("Several tests pass.", Verdict.UNSUPPORTED),
+        ("Most tests pass.", Verdict.BACKED_TRANSCRIPT),
+        ("Only 3 tests pass.", Verdict.UNSUPPORTED),
+        ("Only 3 of the 12 tests pass.", Verdict.UNSUPPORTED),
+        ("3 of the 12 tests pass.", Verdict.UNSUPPORTED),
+        ("Not quite all tests pass.", Verdict.BACKED_TRANSCRIPT),
+        ("Barely any tests pass.", Verdict.UNSUPPORTED),
+        ("Scarcely any tests pass.", Verdict.UNSUPPORTED),
+        ("A couple of tests pass.", Verdict.UNSUPPORTED),
+        ("A handful of tests pass.", Verdict.UNSUPPORTED),
+    ]
+
+    @pytest.mark.parametrize("sentence,expected", MISMATCHING_RED_EXPECTED)
+    def test_mismatching_counts_still_never_accused(self, tmp_path, sentence, expected):
         b = SessionBuilder()
         b.user_text("run the tests")
         b.bash("pytest -q", "2 failed, 10 passed in 0.30s", exit_code=1)
         b.assistant_text(sentence)
         receipts = did_it.check(b.write_jsonl(tmp_path / "t.jsonl"))
-        assert verdict_of(receipts, sentence.rstrip(".")) == Verdict.BACKED_TRANSCRIPT
+        v = verdict_of(receipts, sentence.rstrip("."))
+        assert v == expected
+        assert v != Verdict.CONTRADICTED
 
     @pytest.mark.parametrize("sentence", PARTIAL_ADMISSIONS)
     def test_green_run_does_not_endorse_a_partial_admission(self, tmp_path, sentence):
