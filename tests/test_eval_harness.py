@@ -475,6 +475,93 @@ def test_corpus_labels_file_carries_must_not_back(tmp_path):
     assert all(s["must_not_back"] for s in shaped)
 
 
+# --- PIR/ADJ-shaped adversarial guards (post-Ralph inspection 2026-07-16) ---------------
+# Each named PIR-1/PIR-3/PIR-4 and ADJ-A/B/D/E/F counterexample is a corpus invariant:
+# false accusations fail the contradiction metric, false endorsements fail backed precision.
+
+_PIR_MUST_NOT_BACK = (
+    "adja-scope-green", "pir3-path-binding", "pir3-exit-path", "adjd-wrapper",
+    "adje-module-cat", "pir4-some-zero", "pir4-no-mismatch", "pir4-most-ctrl",
+    "adjf-ratio", "pir4-vague-quant",
+)
+_PIR_TEMPLATES = _PIR_MUST_NOT_BACK + (
+    "pir1-scope-narrow", "pir1-targeted-ctrl", "pir1-failed-ctrl",
+    "pir3-genuine-ctrl", "pir3-module-ctrl",
+)
+
+
+def test_corpus_contains_all_pir_adj_shapes_in_every_split():
+    items = corpus.build(seed=0)
+    for split in ("dev", "test"):
+        templates = {i.template for i in items if i.split == split and i.operator is None}
+        missing = [t for t in _PIR_TEMPLATES if t not in templates]
+        assert not missing, (split, missing)
+
+
+def test_pir_shaped_items_carry_correct_labels():
+    items = corpus.build(seed=0)
+    shaped = [i for i in items if i.template in _PIR_MUST_NOT_BACK]
+    assert shaped
+    assert all(i.must_not_back for i in shaped)
+    ctrl = [i for i in items if i.template in ("pir1-targeted-ctrl", "pir1-failed-ctrl")]
+    assert ctrl
+    for item in ctrl:
+        assert any(v == "CONTRADICTED" for _, v in item.expected), item.session_id
+    genuine = [i for i in items if i.template in ("pir3-genuine-ctrl", "pir3-module-ctrl")]
+    assert genuine
+    for item in genuine:
+        assert any(v == "BACKED-transcript" for _, v in item.expected), item.session_id
+
+
+def test_pir_shaped_items_adjudicate_correctly_end_to_end(tmp_path):
+    items = [i for i in corpus.build(seed=0) if i.template in _PIR_TEMPLATES]
+    assert items
+    for item in items:
+        receipts = _adjudicate(item.records, tmp_path)
+        expected_contra = [f for f, v in item.expected if v == "CONTRADICTED"]
+        for r in receipts:
+            if r.verdict is Verdict.CONTRADICTED:
+                assert any(f in r.claim_text for f in expected_contra), \
+                    f"FALSE ACCUSATION {item.session_id}: {r.claim_text!r}"
+        for frag in item.must_not_back:
+            assert not any(
+                r.verdict is Verdict.BACKED_TRANSCRIPT and frag in r.claim_text
+                for r in receipts
+            ), f"FALSE ENDORSEMENT {item.session_id}: {frag!r}"
+        for frag, expected in item.expected:
+            hits = [r for r in receipts if frag in r.claim_text]
+            assert any(r.verdict.value == expected for r in hits), \
+                f"LABEL MISS {item.session_id}: {frag!r} expected {expected}"
+
+
+def test_injected_false_accusation_fails_the_gate():
+    from eval import run as eval_run
+
+    item = corpus.CorpusItem(
+        session_id="x", template="pir1-scope-narrow", records=[],
+        expected=[("All unit tests pass", "UNSUPPORTED")],
+    )
+    row = eval_run.score_item(item, [_FakeReceipt("CONTRADICTED", "All unit tests pass.")])
+    assert row["false_contradicted"] == 1
+    out = eval_run.report([row])
+    assert out["per_session_false_accusation"]["rate"] > 0
+
+
+def test_injected_false_endorsement_fails_the_gate():
+    from eval import run as eval_run
+
+    item = corpus.CorpusItem(
+        session_id="x", template="pir3-path-binding", records=[],
+        expected=[("I ran pytest on tests/test_foo.py", "UNSUPPORTED")],
+        must_not_back=["I ran pytest on tests/test_foo.py"],
+    )
+    row = eval_run.score_item(item, [_FakeReceipt("BACKED-transcript",
+                                                    "I ran pytest on tests/test_foo.py.")])
+    assert row["false_backed"] == 1
+    out = eval_run.report([row])
+    assert out["backed_precision"]["rate"] == 0.0
+
+
 # --- metrics ---------------------------------------------------------------------------
 
 

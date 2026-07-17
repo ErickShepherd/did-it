@@ -417,6 +417,36 @@ def test_corpus_carries_all_eight_rev_shapes_in_every_split():
         assert not missing, (split, missing)
 
 
+#: PIR/ADJ templates (post-Ralph inspection 2026-07-16)
+_PIR_ADJ_TEMPLATES = (
+    "pir1-scope-narrow",     # PIR-1 + ADJ-B
+    "adja-scope-green",      # ADJ-A
+    "pir1-targeted-ctrl",    # PIR-1 positive control (targeted red)
+    "pir1-failed-ctrl",      # PIR-1 positive control (FAILED line)
+    "pir3-path-binding",     # PIR-3
+    "pir3-exit-path",        # PIR-3
+    "adjd-wrapper",          # ADJ-D
+    "adje-module-cat",       # ADJ-E + L05-DECIDE-5
+    "pir3-genuine-ctrl",     # PIR-3 positive control
+    "pir3-module-ctrl",      # PIR-3 positive control
+    "pir4-some-zero",        # PIR-4
+    "pir4-no-mismatch",      # PIR-4
+    "pir4-most-ctrl",        # PIR-4 + positive control
+    "adjf-ratio",            # ADJ-F
+    "pir4-vague-quant",      # PIR-4 vague quantifiers
+)
+
+
+def test_corpus_carries_all_pir_adj_shapes_in_every_split():
+    from eval import corpus
+
+    items = corpus.build(seed=0)
+    for split in ("dev", "test"):
+        templates = {i.template for i in items if i.split == split and i.operator is None}
+        missing = [t for t in _PIR_ADJ_TEMPLATES if t not in templates]
+        assert not missing, (split, missing)
+
+
 def test_full_generated_corpus_adjudicates_end_to_end(tmp_path):
     # The whole generated corpus — honest and mutant, both splits — through did_it.check():
     # every expected label must match, any CONTRADICTED outside an expected-CONTRADICTED

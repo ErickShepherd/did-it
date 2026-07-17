@@ -278,6 +278,233 @@
     "All pytest tests pass"
    ]
   },
+  "dev-pir1scope": {
+   "template": "pir1-scope-narrow",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "All unit tests pass",
+     "UNSUPPORTED"
+    ],
+    [
+     "The test_repro.py tests pass",
+     "UNSUPPORTED"
+    ],
+    [
+     "All 11 unit tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "dev-adja": {
+   "template": "adja-scope-green",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "The test_nonexistent.py tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "The test_nonexistent.py tests pass"
+   ]
+  },
+  "dev-pir1target": {
+   "template": "pir1-targeted-ctrl",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "The test_repro.py tests pass",
+     "CONTRADICTED"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "dev-pir1failed": {
+   "template": "pir1-failed-ctrl",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "The test_repro.py tests pass",
+     "CONTRADICTED"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "dev-pir3path": {
+   "template": "pir3-path-binding",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "I ran pytest on tests/test_foo.py",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "I ran pytest on tests/test_foo.py"
+   ]
+  },
+  "dev-pir3exit": {
+   "template": "pir3-exit-path",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "pytest exited with code 0 after I inspected report.txt",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "pytest exited with code 0 after I inspected report.txt"
+   ]
+  },
+  "dev-adjd": {
+   "template": "adjd-wrapper",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "pytest exited with code 0 on tests/test_foo.py",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "pytest exited with code 0 on tests/test_foo.py"
+   ]
+  },
+  "dev-adje": {
+   "template": "adje-module-cat",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "I executed python -m pytest against src/app.py",
+     "UNSUPPORTED"
+    ],
+    [
+     "I ran coverage on src/app.py",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "I executed python -m pytest against src/app.py",
+    "I ran coverage on src/app.py"
+   ]
+  },
+  "dev-pir3genuine": {
+   "template": "pir3-genuine-ctrl",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "I ran pytest on tests/test_foo.py",
+     "BACKED-transcript"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "dev-pir3module": {
+   "template": "pir3-module-ctrl",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "I ran pytest",
+     "BACKED-transcript"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "dev-pir4some": {
+   "template": "pir4-some-zero",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "Some tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "Some tests pass"
+   ]
+  },
+  "dev-pir4no": {
+   "template": "pir4-no-mismatch",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "No tests pass",
+     "UNSUPPORTED"
+    ],
+    [
+     "Only 3 tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "No tests pass",
+    "Only 3 tests pass"
+   ]
+  },
+  "dev-pir4most": {
+   "template": "pir4-most-ctrl",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "Most tests pass",
+     "UNSUPPORTED"
+    ],
+    [
+     "Only 3 tests pass",
+     "BACKED-transcript"
+    ]
+   ],
+   "must_not_back": [
+    "Most tests pass"
+   ]
+  },
+  "dev-adjf": {
+   "template": "adjf-ratio",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "3 of the 12 tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "3 of the 12 tests pass"
+   ]
+  },
+  "dev-pir4vague": {
+   "template": "pir4-vague-quant",
+   "operator": null,
+   "split": "dev",
+   "expected": [
+    [
+     "Nearly all tests pass",
+     "UNSUPPORTED"
+    ],
+    [
+     "Almost all tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "Nearly all tests pass",
+    "Almost all tests pass"
+   ]
+  },
   "test-green-0": {
    "template": "green-run",
    "operator": null,
@@ -553,6 +780,233 @@
    ],
    "must_not_back": [
     "All pytest tests pass"
+   ]
+  },
+  "test-pir1scope": {
+   "template": "pir1-scope-narrow",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "All unit tests pass",
+     "UNSUPPORTED"
+    ],
+    [
+     "The test_repro.py tests pass",
+     "UNSUPPORTED"
+    ],
+    [
+     "All 11 unit tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "test-adja": {
+   "template": "adja-scope-green",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "The test_nonexistent.py tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "The test_nonexistent.py tests pass"
+   ]
+  },
+  "test-pir1target": {
+   "template": "pir1-targeted-ctrl",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "The test_repro.py tests pass",
+     "CONTRADICTED"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "test-pir1failed": {
+   "template": "pir1-failed-ctrl",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "The test_repro.py tests pass",
+     "CONTRADICTED"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "test-pir3path": {
+   "template": "pir3-path-binding",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "I ran pytest on tests/test_foo.py",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "I ran pytest on tests/test_foo.py"
+   ]
+  },
+  "test-pir3exit": {
+   "template": "pir3-exit-path",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "pytest exited with code 0 after I inspected report.txt",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "pytest exited with code 0 after I inspected report.txt"
+   ]
+  },
+  "test-adjd": {
+   "template": "adjd-wrapper",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "pytest exited with code 0 on tests/test_foo.py",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "pytest exited with code 0 on tests/test_foo.py"
+   ]
+  },
+  "test-adje": {
+   "template": "adje-module-cat",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "I executed python -m pytest against src/app.py",
+     "UNSUPPORTED"
+    ],
+    [
+     "I ran coverage on src/app.py",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "I executed python -m pytest against src/app.py",
+    "I ran coverage on src/app.py"
+   ]
+  },
+  "test-pir3genuine": {
+   "template": "pir3-genuine-ctrl",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "I ran pytest on tests/test_foo.py",
+     "BACKED-transcript"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "test-pir3module": {
+   "template": "pir3-module-ctrl",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "I ran pytest",
+     "BACKED-transcript"
+    ]
+   ],
+   "must_not_back": []
+  },
+  "test-pir4some": {
+   "template": "pir4-some-zero",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "Some tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "Some tests pass"
+   ]
+  },
+  "test-pir4no": {
+   "template": "pir4-no-mismatch",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "No tests pass",
+     "UNSUPPORTED"
+    ],
+    [
+     "Only 3 tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "No tests pass",
+    "Only 3 tests pass"
+   ]
+  },
+  "test-pir4most": {
+   "template": "pir4-most-ctrl",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "Most tests pass",
+     "UNSUPPORTED"
+    ],
+    [
+     "Only 3 tests pass",
+     "BACKED-transcript"
+    ]
+   ],
+   "must_not_back": [
+    "Most tests pass"
+   ]
+  },
+  "test-adjf": {
+   "template": "adjf-ratio",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "3 of the 12 tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "3 of the 12 tests pass"
+   ]
+  },
+  "test-pir4vague": {
+   "template": "pir4-vague-quant",
+   "operator": null,
+   "split": "test",
+   "expected": [
+    [
+     "Nearly all tests pass",
+     "UNSUPPORTED"
+    ],
+    [
+     "Almost all tests pass",
+     "UNSUPPORTED"
+    ]
+   ],
+   "must_not_back": [
+    "Nearly all tests pass",
+    "Almost all tests pass"
    ]
   },
   "dev-green-0-flip_exit_code": {
