@@ -33,3 +33,24 @@ jobs:
           assert report["per_session_false_accusation"]["rate"] == 0.0, report
           assert report["backed_precision"]["false"] == 0, report
           EOF
+
+  package:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install build twine
+      - run: python scripts/release_check.py
+      - run: python -m build
+      - run: python -m twine check dist/*
+      - name: Smoke-test the wheel in a clean environment
+        run: |
+          version="$(python scripts/release_check.py --print-version)"
+          python -m venv "$RUNNER_TEMP/did-it-smoke"
+          "$RUNNER_TEMP/did-it-smoke/bin/python" -m pip install dist/*.whl
+          test "$("$RUNNER_TEMP/did-it-smoke/bin/did-it" --version)" = "did-it $version"
+          "$RUNNER_TEMP/did-it-smoke/bin/did-it" --help >/dev/null
+          test -x "$RUNNER_TEMP/did-it-smoke/bin/did-it-hook"

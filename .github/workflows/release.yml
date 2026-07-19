@@ -1,0 +1,122 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing vX.Y.Z tag to release
+        required: true
+        type: string
+      publish_pypi:
+        description: Publish to PyPI through the pypi trusted-publisher environment
+        required: true
+        default: false
+        type: boolean
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install -e '.[dev]'
+      - run: python scripts/release_check.py --tag "$RELEASE_TAG"
+      - run: python scripts/leak_gate.py
+      - run: ruff check .
+      - run: pytest -q
+      - name: Enforce held-out evaluation bars
+        run: |
+          python -m eval.run --split test | tee eval-report.json
+          python - <<'PY'
+          import json
+          report = json.load(open('eval-report.json', encoding='utf-8'))
+          assert report['label_match_rate'] == 1.0, report
+          assert report['per_session_false_accusation']['rate'] == 0.0, report
+          assert report['backed_precision']['false'] == 0, report
+          PY
+
+  build:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install build twine
+      - run: python scripts/release_check.py --tag "$RELEASE_TAG"
+      - run: python -m build
+      - run: python -m twine check dist/*
+      - name: Smoke-test the wheel in a clean environment
+        run: |
+          version="$(python scripts/release_check.py --print-version)"
+          python -m venv "$RUNNER_TEMP/did-it-smoke"
+          "$RUNNER_TEMP/did-it-smoke/bin/python" -m pip install dist/*.whl
+          test "$("$RUNNER_TEMP/did-it-smoke/bin/did-it" --version)" = "did-it $version"
+          "$RUNNER_TEMP/did-it-smoke/bin/did-it" --help >/dev/null
+          test -x "$RUNNER_TEMP/did-it-smoke/bin/did-it-hook"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-dist
+          path: dist/*
+          if-no-files-found: error
+
+  github-release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-dist
+          path: dist
+      - name: Create the release or refresh its package assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="docs/releases/${RELEASE_TAG}.md"
+          test -f "$notes"
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" dist/* --clobber
+          else
+            gh release create "$RELEASE_TAG" dist/* \
+              --verify-tag --title "did-it $RELEASE_TAG" --notes-file "$notes"
+          fi
+
+  pypi:
+    needs: build
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.publish_pypi) ||
+      (github.event_name == 'push' && vars.PUBLISH_PYPI == 'true')
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/did-it
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-dist
+          path: dist
+      - uses: pypa/gh-action-pypi-publish@release/v1

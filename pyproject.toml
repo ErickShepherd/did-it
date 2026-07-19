@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "did-it"
-version = "0.1.0"  # keep in sync with did_it.__version__
+version = "0.2.0"  # keep in sync with did_it.__version__ and CITATION.cff
 description = "Mechanically check whether an AI coding agent's claims match what its Claude Code session actually did."
 readme = "README.md"
 license = { text = "MIT" }
