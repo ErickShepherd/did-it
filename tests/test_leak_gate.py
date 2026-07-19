@@ -129,3 +129,45 @@ class TestKnownRepoNamesMechanism:
         f.write_text('{"note": "FIXTURES_ONLY", "repo": "acmesecretproj/api"}\n')
         assert leak_gate.scan(f) == []                    # clean without the names denylist
         assert any("deny pattern" in p for p in leak_gate.scan(f, extra))  # flagged with it
+
+
+class TestStructuralTreeScan:
+    """The repo-wide structural scan (design doc D8): the no-arg CI/release run walks the whole
+    tracked tree — not just fixtures/ — for near-zero-FP leaks (real home paths, concrete key
+    shapes) that escaped the old default when private data lived in docs/ or scripts/."""
+
+    def test_real_home_path_in_a_non_fixture_file_is_flagged(self, tmp_path):
+        # "/home/" + "dawn" kept split so this test's own source carries no literal real home path.
+        f = tmp_path / "notes.md"
+        f.write_text("run `/home/" + "dawn" + "/.nvm/bin/claude`, then read the output")
+        assert any("real home path" in p for p in leak_gate.scan_structural(f))
+
+    def test_home_placeholders_do_not_false_positive(self, tmp_path):
+        f = tmp_path / "notes.md"
+        f.write_text("example: /home/user/projects/x, /home/alice/tmp, /Users/example/y")
+        assert leak_gate.scan_structural(f) == []
+
+    def test_concrete_key_shape_flagged_but_type_annotation_is_not(self, tmp_path):
+        """Catches concrete key shapes anywhere, yet must NOT fire on ordinary source like a
+        `token: str` annotation — the reason the loose keyword pattern stays out of the tree scan."""
+        leaky = tmp_path / "src.py"
+        leaky.write_text("TOKEN = 'ghp_" + "a" * 36 + "'\n")
+        assert any("deny pattern" in p for p in leak_gate.scan_structural(leaky))
+        annotated = tmp_path / "ann.py"
+        annotated.write_text("def f(token: str, secret: str, password: str) -> None: ...\n")
+        assert leak_gate.scan_structural(annotated) == []
+
+    def test_gate_own_code_and_tests_are_exempt(self):
+        """The gate's code and this test file embed sample paths and token shapes by design, so the
+        structural scan skips them entirely (they are reviewed as the gate itself)."""
+        assert leak_gate.STRUCTURAL_EXEMPT >= {"scripts/leak_gate.py", "tests/test_leak_gate.py"}
+        assert leak_gate.scan_structural(Path("tests/test_leak_gate.py")) == []
+
+    def test_iter_tracked_walks_the_repo_and_skips_binaries(self):
+        tracked = leak_gate.iter_tracked()
+        if not tracked:
+            import pytest
+
+            pytest.skip("git ls-files unavailable")
+        assert "scripts/leak_gate.py" in {p.as_posix() for p in tracked}
+        assert all(p.suffix.lower() not in leak_gate._BINARY_SUFFIXES for p in tracked)

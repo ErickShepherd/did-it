@@ -16,6 +16,8 @@ public API is pre-1.0.
 - Added deterministic pytest-family, Cargo, Jest/npm, and Go runner literacy.
 - Added held-out false-endorsement precision gates, fabricated adversarial fixtures, and hardened
   Ralph-loop containment evidence.
+- Broadened the privacy leak gate: the no-argument run now scans the whole tracked tree for real
+  home paths and concrete key shapes, not only `fixtures/`.
 
 ### Known limitations
 
