@@ -17,11 +17,15 @@ Read this file before changing the repository.
   [`docs/operations/l05-pre2-evidence-2026-07-16.md`](docs/operations/l05-pre2-evidence-2026-07-16.md)):
   the earlier harness guard gaps were fixed and deployed in the external loop-guard harness
   (`main@a77578e`), and the hardened driver now exists under `scripts/l05/`. The owner-authorized
-  loop completed L05-01..12; GATE-1 through GATE-4 pass. **GATE-5 owner M0/merge approval remains
-  open**, so no merge, push, or branch deletion is yet authorized.
+  loop completed L05-01..12; GATE-1 through GATE-5 pass, and the owner approved M0 plus the local
+  fast-forward merge on 2026-07-19. Remote publication, force-push, release, and branch deletion
+  remain separate and are not authorized by that approval.
 - [`docs/operations/l05-containment-2026-07-19.md`](docs/operations/l05-containment-2026-07-19.md)
   is the formal GATE-4 PASS record. It reconciles all driver/worker counts, verifies the recovered
   nineteenth worker model check, and confirms that real refs and the live remote stayed contained.
+- [`docs/operations/m0-owner-approval-2026-07-19.md`](docs/operations/m0-owner-approval-2026-07-19.md)
+  records GATE-5, the exact local fast-forward authorization, and the decision to require a separate
+  owner instruction before any archival remote ref or force-with-lease publication.
 - [`docs/reviews/2026-07-16-l05-charter-critique.md`](docs/reviews/2026-07-16-l05-charter-critique.md)
   is a same-session critique of charter v1 and the assessment (satisfies no gate). Charter v2
   incorporates its bounded test-authorization, ordering, containment, and record-accuracy findings.
