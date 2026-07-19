@@ -68,7 +68,7 @@ Stop hook (`did-it-hook`, advisory: it prints the receipt and never blocks the s
 - **Deterministic — no LLM in the hot path.** Every pattern (claim grammar, runner matchers, framework
   summary markers) is published in the source, greppable and auditable. No judge model, no circularity.
 - **Fail closed.** Unknown schema, partial parse, subagent sidechains → `NOT-EVALUABLE`, never a guess.
-- **Narrow scope is a feature.** Claude Code transcripts (schema versions 2.1.156–2.1.205), procedural
+- **Narrow scope is a feature.** Claude Code transcripts (schema versions 2.1.156–2.1.207), procedural
   claims only. Narrow-and-correct over broad-and-flaky — a verifier that mis-verifies is worse than none.
 - **`--verify` executes only what it can trust.** The optional `--verify <repo>` re-runs a green claim's
   own test command to upgrade `BACKED-transcript` → `BACKED-verified`. The command string is untrusted

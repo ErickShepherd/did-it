@@ -16,24 +16,28 @@ Read this file before changing the repository.
   **PRE-2 is CLOSED** (2026-07-16, commit `12913bf`, evidence in
   [`docs/operations/l05-pre2-evidence-2026-07-16.md`](docs/operations/l05-pre2-evidence-2026-07-16.md)):
   the earlier harness guard gaps were fixed and deployed in the external loop-guard harness
-  (`main@a77578e`), and the hardened driver now exists under `scripts/l05/`. **The loop has NOT
-  launched and still requires a separate explicit owner launch authorization**; no merge, push, or
-  branch deletion is authorized.
+  (`main@a77578e`), and the hardened driver now exists under `scripts/l05/`. The owner-authorized
+  loop completed L05-01..12; GATE-1 through GATE-4 pass. **GATE-5 owner M0/merge approval remains
+  open**, so no merge, push, or branch deletion is yet authorized.
+- [`docs/operations/l05-containment-2026-07-19.md`](docs/operations/l05-containment-2026-07-19.md)
+  is the formal GATE-4 PASS record. It reconciles all driver/worker counts, verifies the recovered
+  nineteenth worker model check, and confirms that real refs and the live remote stayed contained.
 - [`docs/reviews/2026-07-16-l05-charter-critique.md`](docs/reviews/2026-07-16-l05-charter-critique.md)
   is a same-session critique of charter v1 and the assessment (satisfies no gate). Charter v2
   incorporates its bounded test-authorization, ordering, containment, and record-accuracy findings.
   Every owner decision and pre-loop gate was unchecked when the critique was written; all are now
   resolved as recorded in the ledger (PRE-1/PRE-3/DECIDE-1..5 ratified, PRE-2 closed 2026-07-16).
 - [`docs/reviews/2026-07-16-post-ralph-inspection.md`](docs/reviews/2026-07-16-post-ralph-inspection.md)
-  is the current acceptance state. It records four open findings discovered after the L0 Ralph
-  loop; treat the prior sign-off as invalidated until they are independently reviewed.
+  is the historical inspection that reopened L0. Its four findings drove L0.5 and are superseded
+  for current acceptance by the L05 ledger's completed remediation and GATE-1..4 records.
 - [`docs/reviews/2026-07-16-independent-falsification.md`](docs/reviews/2026-07-16-independent-falsification.md)
   technically corroborates all four PIR findings (disposition BLOCK), with adjacent counterexamples
   ADJ-A/B/D/E/F. The launcher used Fable 5 rather than the requested Opus 4.6; the review response
   itself was read-only, then the same session persisted it on the owner's subsequent instruction.
-  The model substitution and lack of a separate recorder leave the independent-review gate open.
+  The model substitution and lack of a separate recorder invalidated that historical review gate;
+  the later model-verified, no-write GATE-2 and GATE-3 reviews in the L05 ledger supersede it.
 - [`docs/operations/claude-review-post-ralph-2026-07-16.md`](docs/operations/claude-review-post-ralph-2026-07-16.md)
-  is the review-only prompt for a fresh Claude Opus 4.6 process to falsify those findings.
+  is the historical review-only prompt that led to the L0.5 remediation record.
 - [`docs/reviews/2026-07-15-adversarial-review.md`](docs/reviews/2026-07-15-adversarial-review.md)
   contains eight reproduced correctness findings, REV-1 through REV-8.
 - [`docs/design/model-agnostic-ingestion.md`](docs/design/model-agnostic-ingestion.md) defines the
