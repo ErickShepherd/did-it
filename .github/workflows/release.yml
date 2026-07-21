@@ -25,15 +25,15 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python-version: ['3.10', '3.12']
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.RELEASE_TAG }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install -e '.[dev]'
+      - run: python -m pip install -e . -r requirements/ci.txt
       - run: python scripts/release_check.py --tag "$RELEASE_TAG"
       - run: python scripts/leak_gate.py
       - run: ruff check .
@@ -53,13 +53,13 @@ jobs:
     needs: verify
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.RELEASE_TAG }}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
-      - run: pip install build twine
+      - run: python -m pip install -r requirements/ci.txt
       - run: python scripts/release_check.py --tag "$RELEASE_TAG"
       - run: python -m build
       - run: python -m twine check dist/*
@@ -71,7 +71,7 @@ jobs:
           test "$("$RUNNER_TEMP/did-it-smoke/bin/did-it" --version)" = "did-it $version"
           "$RUNNER_TEMP/did-it-smoke/bin/did-it" --help >/dev/null
           test -x "$RUNNER_TEMP/did-it-smoke/bin/did-it-hook"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-dist
           path: dist/*
@@ -83,10 +83,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.RELEASE_TAG }}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-dist
           path: dist
@@ -115,7 +115,7 @@ jobs:
     permissions:
       id-token: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: release-dist
           path: dist

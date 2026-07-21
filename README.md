@@ -135,7 +135,7 @@ Design records: [`docs/design/did-it.md`](docs/design/did-it.md) ·
 [`model- and runtime-agnostic ingestion`](docs/design/model-agnostic-ingestion.md) ·
 [`cross-runtime installation plan`](docs/design/cross-runtime-installation-plan.md) ·
 [`schema-range validation`](docs/design/schema-range-validation.md) ·
-[`v0.2.0 release scope`](docs/releases/v0.2.0.md).
+[`v0.2.1 release scope`](docs/releases/v0.2.1.md).
 
 ## License
 

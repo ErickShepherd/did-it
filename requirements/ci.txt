@@ -1,0 +1,5 @@
+# Direct CI and release-tool pins, resolved and tested together on 2026-07-21.
+build==1.5.0
+pytest==9.1.1
+ruff==0.15.22
+twine==6.2.0

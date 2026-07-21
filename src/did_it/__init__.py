@@ -14,7 +14,7 @@ from pathlib import Path
 
 from .verdicts import Receipt, Verdict  # noqa: F401  (public surface)
 
-__version__ = "0.2.0"
+__version__ = "0.2.1"
 
 
 def check(path: str | Path, *, verify_repo: str | None = None) -> list[Receipt]:

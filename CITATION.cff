@@ -13,8 +13,8 @@ authors:
     given-names: "Erick Edward"
     email: "dev@erickshepherd.com"
     orcid: "https://orcid.org/0000-0002-4750-6100"
-version: "0.2.0"
-date-released: "2026-07-19"
+version: "0.2.1"
+date-released: "2026-07-21"
 doi: "10.5281/zenodo.21315914"
 license: MIT
 repository-code: "https://github.com/ErickShepherd/did-it"

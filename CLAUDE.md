@@ -4,7 +4,7 @@ Read this file before changing the repository.
 
 ## Current public records
 
-- [`docs/releases/v0.2.0.md`](docs/releases/v0.2.0.md) defines the shipped scope, calibration
+- [`docs/releases/v0.2.1.md`](docs/releases/v0.2.1.md) defines the shipped scope, calibration
   evidence, and known limitations for the current release candidate.
 - [`docs/design/did-it.md`](docs/design/did-it.md) describes the current Claude Code transcript
   pipeline and its precision-first accusation boundary.

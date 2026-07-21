@@ -3,6 +3,18 @@
 All notable release changes are recorded here. The project follows semantic versioning while the
 public API is pre-1.0.
 
+## [0.2.1] - 2026-07-21
+
+### Changed
+
+- Migrated every JavaScript-based workflow dependency to a Node.js 24-native major.
+- Expanded CI and release verification across every supported stable CPython minor from 3.10
+  through 3.14.
+- Pinned the successfully tested Ruff, pytest, build, Twine, and Hatchling versions used by CI
+  and release builds so an unrelated tool release cannot change an unchanged candidate.
+- Refreshed release metadata for the v0.2.1 maintenance release; runtime behavior and the
+  Claude Code transcript scope are unchanged from v0.2.0.
+
 ## [0.2.0] - 2026-07-19
 
 ### Changed
@@ -28,3 +40,4 @@ public API is pre-1.0.
   roadmap work; this release supports Claude Code transcripts only.
 
 [0.2.0]: https://github.com/ErickShepherd/did-it/compare/v0.1.0...v0.2.0
+[0.2.1]: https://github.com/ErickShepherd/did-it/compare/v0.2.0...v0.2.1

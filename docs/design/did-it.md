@@ -1,11 +1,11 @@
 # `did-it` — Design
 
 **Status:** built to this design; anchor-calibrated (0 false accusations / 200 real sessions, re-checked
-0 / 400 after v1.1). Package version `0.2.0`; "v1.0"/"v1.1" below name design milestones, not releases.
+0 / 400 after v1.1). Package version `0.2.1`; "v1.0"/"v1.1" below name design milestones, not releases.
 **One line:** a tool that mechanically checks whether an AI coding agent's natural-language claims match what its
 Claude Code session actually did — narrow, precision-first.
 
-> **Current boundary:** the [v0.2.0 release record](../releases/v0.2.0.md) documents the hardened
+> **Current boundary:** the [v0.2.1 release record](../releases/v0.2.1.md) documents the hardened
 > correctness paths, calibration evidence, and remaining limitations. The
 > [model- and runtime-agnostic ingestion proposal](model-agnostic-ingestion.md) concludes that
 > generalization is feasible through a neutral event IR and calibrated source adapters. That is
