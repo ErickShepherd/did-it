@@ -2,10 +2,11 @@
 
 **Status:** proposed implementation plan, 2026-07-15.
 **Product term:** agent-runtime agnostic, not "installable into an LLM."
-**Depends on:** [model-agnostic ingestion](model-agnostic-ingestion.md) and closure of
-the P1 findings in the
-[2026-07-15 adversarial review](../reviews/2026-07-15-adversarial-review.md).
-**Ralph execution:** [cross-runtime Ralph guide](../operations/ralph-cross-runtime.md).
+**Depends on:** [model-agnostic ingestion](model-agnostic-ingestion.md), the current
+[release scope and limitations](../releases/v0.2.0.md), and independent validation before any
+new runtime is allowed to issue accusations.
+**Execution boundary:** this document is a staged design plan, not authorization to run an
+autonomous implementation loop, merge, push, or publish.
 
 ## Outcome
 

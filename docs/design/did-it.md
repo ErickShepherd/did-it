@@ -5,13 +5,11 @@
 **One line:** a tool that mechanically checks whether an AI coding agent's natural-language claims match what its
 Claude Code session actually did — narrow, precision-first.
 
-> **Follow-up records (2026-07-15):** the
-> [adversarial correctness review](../reviews/2026-07-15-adversarial-review.md) documents eight
-> reproduced gaps outside the current corpus. The
+> **Current boundary:** the [v0.2.0 release record](../releases/v0.2.0.md) documents the hardened
+> correctness paths, calibration evidence, and remaining limitations. The
 > [model- and runtime-agnostic ingestion proposal](model-agnostic-ingestion.md) concludes that
-> generalization is feasible through a neutral event IR and calibrated source adapters, after the
-> shared P1 correctness findings are closed. These are proposed follow-ups; they do not silently
-> widen v1's shipped scope or schema range.
+> generalization is feasible through a neutral event IR and calibrated source adapters. That is
+> roadmap work and does not widen the shipped Claude Code scope or schema range.
 
 ## Context / problem
 Coding agents routinely *claim* work they didn't do ("tests pass", "fixed the bug"). Verifying this today is manual —

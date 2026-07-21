@@ -2,9 +2,8 @@
 
 **Status:** proposed investigation record, 2026-07-15.
 **Decision:** feasible, but only through a versioned neutral event model plus source adapters.
-**Prerequisite:** close the P1 findings in
-[`../reviews/2026-07-15-adversarial-review.md`](../reviews/2026-07-15-adversarial-review.md)
-before enabling accusations for any new source.
+**Prerequisite:** satisfy the current [release safety boundary](../releases/v0.2.0.md) and complete
+independent adversarial validation before enabling accusations for any new source.
 **Execution plan:**
 [`cross-runtime-installation-plan.md`](cross-runtime-installation-plan.md).
 
